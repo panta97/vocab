@@ -1,0 +1,37 @@
+{
+  "name": "vocab",
+  "version": "0.1.0",
+  "description": "macOS menu bar app for looking up unknown English words while reading, powered by Claude",
+  "main": "./out/main/index.js",
+  "author": "Roosevelt Pantaleon",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "postinstall": "electron-builder install-app-deps",
+    "package:mac": "electron-vite build && electron-builder --mac --config electron-builder.yml",
+    "dev:web": "vite -c vite.web.config.ts",
+    "build:web": "vite build -c vite.web.config.ts",
+    "preview:web": "vite preview -c vite.web.config.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "electron": "^32.1.2",
+    "electron-builder": "^25.1.7",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

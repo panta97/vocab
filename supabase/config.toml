@@ -1,0 +1,13 @@
+# Supabase project config. Used when running `supabase` CLI locally.
+# Fill in `project_id` after creating the project (or after `supabase link`).
+
+project_id = "spvoiygpducryabaxkjl"
+
+[api]
+enabled = true
+
+[db]
+port = 54322
+
+[functions.lookup-word]
+verify_jwt = true

@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <img id="icon" src="">
+    <script>
+      const params = new URLSearchParams(location.search);
+      document.getElementById('icon').src = params.get('src') || 'app-icon.svg';
+    </script>
+  </body>
+</html>

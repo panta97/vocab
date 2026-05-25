@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(command -v magick)",
+      "Bash(magick -version)",
+      "Bash(command -v convert)",
+      "Bash(command -v rsvg-convert)",
+      "Bash(command -v inkscape)",
+      "Bash(command -v sips)",
+      "Bash(command -v iconutil)",
+      "Bash(python3 -c \"import PIL; print\\(PIL.__version__\\)\")",
+      "Bash(command -v brew)",
+      "Bash(brew --version)",
+      "Bash(python3 -c \"import Quartz; print\\('ok'\\)\")",
+      "Read(//Applications/Google Chrome.app/**)",
+      "Bash(sips --formats)",
+      "Bash(chmod +x /Users/rooseveltpantaleon/Developer/react/vocab/resources/src/build-icons.sh)",
+      "Bash(/Users/rooseveltpantaleon/Developer/react/vocab/resources/src/build-icons.sh)",
+      "Read(//Applications/Vocab.app/Contents/MacOS/**)",
+      "Read(//Applications/Vocab.app/**)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print :LSUIElement\" \"/Applications/Vocab.app/Contents/Info.plist\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(command -v supabase)",
+      "Bash(supabase --version)",
+      "Bash(supabase link *)",
+      "Bash(supabase db *)",
+      "Bash(supabase secrets *)",
+      "Bash(supabase functions *)",
+      "Bash(pkill -f \"electron-vite\")",
+      "Bash(pkill -f \"vocab\")"
+    ]
+  }
+}
