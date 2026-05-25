@@ -507,8 +507,13 @@ code {
 
 /* Browser mode — when not running inside Electron.
    Adds a page background and centers the app on wide viewports. */
+html.web {
+  background: #1a1452;
+}
+
 html.web body {
   background: linear-gradient(135deg, #2a1f8a 0%, #0d0d1c 100%);
+  background-attachment: fixed;
   min-height: 100vh;
 }
 
@@ -523,6 +528,9 @@ html.web .app {
   width: 100%;
   height: 100%;
   border: none;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: border-box;
 }
 
 @media (min-width: 700px) {

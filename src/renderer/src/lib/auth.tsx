@@ -93,7 +93,7 @@ function SignIn(): JSX.Element {
       return
     }
     setStage('enter-code')
-    setMsg('Check your email for a 6-digit code.')
+    setMsg('Check your email for the verification code.')
   }
 
   async function verify(): Promise<void> {
@@ -139,7 +139,7 @@ function SignIn(): JSX.Element {
           <input
             className="key-input"
             inputMode="numeric"
-            placeholder="6-digit code"
+            placeholder="Code from email"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             disabled={busy}
@@ -148,7 +148,7 @@ function SignIn(): JSX.Element {
           <button
             className="primary"
             onClick={() => void verify()}
-            disabled={busy || code.trim().length < 6}
+            disabled={busy || code.trim().length < 4}
           >
             {busy ? 'Verifying…' : 'Verify'}
           </button>

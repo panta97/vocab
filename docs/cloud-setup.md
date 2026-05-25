@@ -69,7 +69,7 @@ The default Supabase auth is already email-based. Confirm in the dashboard:
 
 - **Authentication → Providers → Email** is enabled.
 - **Authentication → URL Configuration → Site URL**: set to `http://localhost` (just to satisfy validation — magic-link OTP doesn't actually use redirects).
-- The sign-in flow uses a 6-digit OTP code emailed to you. No email-template tweaking required for that flow.
+- The sign-in flow uses a numeric OTP code (6–8 digits depending on your Supabase config) emailed to you. No email-template tweaking required for that flow.
 
 ## 8. Smoke test
 
@@ -78,7 +78,7 @@ npm run dev
 ```
 
 1. App opens to a sign-in screen — enter your email.
-2. Check inbox for a 6-digit code from Supabase, paste it back.
+2. Check inbox for the verification code from Supabase, paste it back.
 3. You land in the Lookup tab. Paste any paragraph, highlight a word, click "Explain in context".
 4. Open the Supabase dashboard → Table Editor → `lookups`. A row should appear, scoped to your `user_id`.
 
@@ -130,13 +130,13 @@ Sign out of the app, sign back in, request a code. It should arrive in ~1-2 seco
 
 After this you can send hundreds of OTP codes per hour without issue. No more rate-limit errors during testing or future device onboarding.
 
-## How sign-in works (6-digit OTP flow)
+## How sign-in works (email OTP flow)
 
 Reference for what's happening under the hood when you click "Send code":
 
 1. **App → Supabase**: renderer calls `supabase.auth.signInWithOtp({ email })`.
 2. **Supabase server**:
-   - Generates a random 6-digit number.
+   - Generates a random numeric code (6–8 digits, set in Supabase auth config).
    - Hashes it and stores the hash in `auth.one_time_tokens` with an expiry (default 1 hour) and the target email.
    - Sends an email using the **Magic Link** template — we replaced its body with `{{ .Token }}` so it shows the raw code, not a link.
 3. **You receive the email**, type the code back into the app.
@@ -150,7 +150,7 @@ Reference for what's happening under the hood when you click "Send code":
    - Postgres reads `auth.uid()` from the JWT → RLS policies scope every query/insert to your `user_id`.
    - When `access_token` is near expiry, the SDK silently refreshes it using `refresh_token`. That's why you don't sign in every hour.
 
-The 6-digit code is a one-time **proof of email ownership**. By typing it back you prove control of the inbox. No password to leak, no password reuse risk, no link that opens in the wrong app.
+The numeric code is a one-time **proof of email ownership**. By typing it back you prove control of the inbox. No password to leak, no password reuse risk, no link that opens in the wrong app.
 
 ## Updating the function later
 
