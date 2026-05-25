@@ -359,6 +359,36 @@ button.secondary:disabled {
   flex: 1;
 }
 
+.load-more {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 12px;
+  background: var(--border);
+  color: var(--fg);
+  border: 0;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.load-more:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.load-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.end-of-list {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 8px 0 4px;
+  font-style: italic;
+}
+
 .search {
   width: 100%;
   padding: 7px 10px;

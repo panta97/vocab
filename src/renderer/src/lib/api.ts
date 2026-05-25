@@ -43,17 +43,30 @@ export async function lookupWord(req: LookupRequest): Promise<ApiResult<Lookup>>
   return { ok: true, data: rowToLookup(data) }
 }
 
-export async function listHistory(search?: string): Promise<ApiResult<Lookup[]>> {
+export interface ListHistoryOptions {
+  search?: string
+  before?: string // ISO timestamp; returns rows older than this
+  limit?: number
+}
+
+export async function listHistory(
+  opts: ListHistoryOptions = {}
+): Promise<ApiResult<Lookup[]>> {
+  const limit = opts.limit ?? 20
   try {
     let query = supabase
       .from('lookups')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(500)
+      .order('id', { ascending: false })
+      .limit(limit)
 
-    const q = search?.trim()
+    if (opts.before) {
+      query = query.lt('created_at', opts.before)
+    }
+
+    const q = opts.search?.trim()
     if (q) {
-      // ILIKE across word and paragraph. Supabase syntax: comma-separated or() clauses.
       const safe = q.replace(/[%_]/g, '\\$&')
       query = query.or(`word.ilike.%${safe}%,paragraph.ilike.%${safe}%`)
     }

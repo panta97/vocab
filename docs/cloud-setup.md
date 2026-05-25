@@ -98,6 +98,38 @@ Effect: your existing account can still sign in. Any new email gets "Signups are
 
 This is a one-line dashboard change and is the simplest single-user lockdown for a personal app.
 
+## 10. Custom email sender via Resend (recommended)
+
+Supabase's built-in email service is rate-limited to about **2 emails per hour** for the entire project on the free tier. With multiple devices (Mac + iPhone + maybe a fresh browser test), you'll hit this fast and see "email rate limit exceeded" errors. The fix is to route emails through your own SMTP provider. [Resend](https://resend.com) has a free tier of **3,000 emails/month** — far beyond what a personal sign-in flow needs.
+
+### One-time Resend setup
+
+1. Sign up at [resend.com](https://resend.com) (free, GitHub sign-in is fine).
+2. **API Keys** (left sidebar) → **Create API Key**. Name it `Supabase Vocab`, scope **Sending access**. Copy the key (starts with `re_...`). You only see it once.
+3. Decide on the sender email:
+   - **Option A — no domain**: use `onboarding@resend.dev` (Resend's shared sender). Limitation: Resend will only deliver to *your verified Resend account email*. Fine for a single-user app where only you sign in.
+   - **Option B — your own domain**: **Domains** → **Add Domain**, enter `yourdomain.com`, add the displayed DNS records (SPF, DKIM) at your registrar, click **Verify**. Once verified you can send from `noreply@yourdomain.com` to anyone.
+
+### Wire it into Supabase
+
+1. In the Supabase dashboard: **Authentication → Emails → SMTP Settings**:
+   `https://supabase.com/dashboard/project/<your-project-ref>/auth/templates` (SMTP tab)
+2. Toggle **Enable Custom SMTP**.
+3. Fill in:
+   - **Host**: `smtp.resend.com`
+   - **Port**: `465`
+   - **Username**: `resend`
+   - **Password**: the Resend API key from above
+   - **Sender email**: `onboarding@resend.dev` (Option A) or `noreply@yourdomain.com` (Option B)
+   - **Sender name**: `Vocab`
+4. Click **Save**.
+
+### Verify
+
+Sign out of the app, sign back in, request a code. It should arrive in ~1-2 seconds via Resend. Confirm in the Resend dashboard → **Emails** that a delivery is logged.
+
+After this you can send hundreds of OTP codes per hour without issue. No more rate-limit errors during testing or future device onboarding.
+
 ## How sign-in works (6-digit OTP flow)
 
 Reference for what's happening under the hood when you click "Send code":
