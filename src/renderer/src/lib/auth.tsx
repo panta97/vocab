@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured } from './supabase'
+import { clearCache as clearHistoryCache } from './historyCache'
 
 interface AuthState {
   session: Session | null
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
 
   async function signOut(): Promise<void> {
     await supabase.auth.signOut()
+    clearHistoryCache()
   }
 
   return (

@@ -84,6 +84,42 @@ npm run dev
 
 If the lookup call fails, run `supabase functions logs lookup-word --tail` in another terminal and trigger another lookup — the error will print there.
 
+## 9. Lock down new signups (single-user mode)
+
+By default, anyone with any email can sign up to your Supabase project. They can't see your data (RLS isolates rows by `user_id`), but a stranger's account could still call your `lookup-word` Edge Function — which costs *your* Anthropic credits. After you've signed up your own account (step 8 above), disable new signups:
+
+1. Open the Email provider settings:
+   `https://supabase.com/dashboard/project/<your-project-ref>/auth/providers`
+2. Find the **Email** provider.
+3. Toggle **"Allow new users to sign up"** → **off**.
+4. Save.
+
+Effect: your existing account can still sign in. Any new email gets "Signups are disabled" when they try to log in. If you ever need a second account later, flip the toggle back on, sign them up, flip it off.
+
+This is a one-line dashboard change and is the simplest single-user lockdown for a personal app.
+
+## How sign-in works (6-digit OTP flow)
+
+Reference for what's happening under the hood when you click "Send code":
+
+1. **App → Supabase**: renderer calls `supabase.auth.signInWithOtp({ email })`.
+2. **Supabase server**:
+   - Generates a random 6-digit number.
+   - Hashes it and stores the hash in `auth.one_time_tokens` with an expiry (default 1 hour) and the target email.
+   - Sends an email using the **Magic Link** template — we replaced its body with `{{ .Token }}` so it shows the raw code, not a link.
+3. **You receive the email**, type the code back into the app.
+4. **App → Supabase**: renderer calls `supabase.auth.verifyOtp({ email, token, type: 'email' })`.
+5. **Supabase server**:
+   - Looks up the hash for that email, compares to the submitted code, checks expiry.
+   - If valid: invalidates the code (one-time use), issues a JWT session — an `access_token` (1-hour lifetime) plus a `refresh_token` (longer-lived).
+6. **SDK** stores both tokens in `localStorage` under `sb-<project-ref>-auth-token`.
+7. **Every subsequent request**:
+   - SDK auto-attaches `Authorization: Bearer <access_token>`.
+   - Postgres reads `auth.uid()` from the JWT → RLS policies scope every query/insert to your `user_id`.
+   - When `access_token` is near expiry, the SDK silently refreshes it using `refresh_token`. That's why you don't sign in every hour.
+
+The 6-digit code is a one-time **proof of email ownership**. By typing it back you prove control of the inbox. No password to leak, no password reuse risk, no link that opens in the wrong app.
+
 ## Updating the function later
 
 After editing `supabase/functions/lookup-word/index.ts`:

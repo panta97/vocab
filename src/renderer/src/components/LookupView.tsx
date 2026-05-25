@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { Lookup } from '@shared/types'
 import { lookupWord } from '../lib/api'
+import { prependCached } from '../lib/historyCache'
 import { ResultCard } from './ResultCard'
 
 export function LookupView(): JSX.Element {
@@ -46,6 +47,7 @@ export function LookupView(): JSX.Element {
 
     if (res.ok) {
       setResult(res.data)
+      prependCached(res.data)
     } else {
       setError(res.error)
     }
