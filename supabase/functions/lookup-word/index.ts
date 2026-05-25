@@ -15,6 +15,7 @@ The reader will give you:
 - a word or phrase from that paragraph they don't understand
 
 Use the record_word_lookup tool to return:
+- word_class: The part of speech of the word as it's used in this paragraph — lowercase, e.g. "noun", "verb", "adjective", "adverb", "phrasal verb", "idiom", "proper noun". Pick the single best fit for the contextual usage.
 - explanation: 2 to 4 sentences explaining what the word means *as it is used in this specific paragraph*. Focus on contextual meaning, not generic dictionary definitions. Clear, simple English. Don't repeat the paragraph back.
 - synonyms: 3 to 5 simple words or short phrases that capture the same sense the word has in this paragraph. Prefer common words.
 - examples: 1 or 2 short, natural example sentences (not from the original paragraph) that use the word with the same sense.`
@@ -81,6 +82,7 @@ ${paragraph}
 Word or phrase to explain: "${word}"`
 
   let explanation = ''
+  let wordClass = ''
   let synonyms: string[] = []
   let examples: string[] = []
 
@@ -97,6 +99,11 @@ Word or phrase to explain: "${word}"`
           input_schema: {
             type: 'object',
             properties: {
+              word_class: {
+                type: 'string',
+                description:
+                  "Part of speech of the word as used in this paragraph. Lowercase, e.g. 'noun', 'verb', 'adjective', 'adverb', 'phrasal verb', 'idiom', 'proper noun'."
+              },
               explanation: {
                 type: 'string',
                 description:
@@ -115,7 +122,7 @@ Word or phrase to explain: "${word}"`
                   'One or two short example sentences using the word in the same sense.'
               }
             },
-            required: ['explanation', 'synonyms', 'examples']
+            required: ['word_class', 'explanation', 'synonyms', 'examples']
           }
         }
       ],
@@ -129,6 +136,7 @@ Word or phrase to explain: "${word}"`
     if (!toolUse) return jsonError(502, 'Claude did not return a structured response')
 
     const input = toolUse.input
+    wordClass = String(input.word_class ?? '').trim().toLowerCase()
     explanation = String(input.explanation ?? '').trim()
     synonyms = Array.isArray(input.synonyms)
       ? input.synonyms.map((s) => String(s).trim()).filter(Boolean)
@@ -148,6 +156,7 @@ Word or phrase to explain: "${word}"`
     .insert({
       user_id: user.id,
       word,
+      word_class: wordClass,
       paragraph,
       explanation,
       synonyms,

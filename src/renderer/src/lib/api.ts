@@ -4,6 +4,7 @@ import { supabase } from './supabase'
 interface LookupRow {
   id: string
   word: string
+  word_class: string | null
   paragraph: string
   explanation: string
   synonyms: string[] | null
@@ -15,6 +16,7 @@ function rowToLookup(row: LookupRow): Lookup {
   return {
     id: row.id,
     word: row.word,
+    wordClass: row.word_class ?? '',
     paragraph: row.paragraph,
     explanation: row.explanation,
     synonyms: row.synonyms ?? [],

@@ -18,7 +18,12 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
     <article className="result-card">
       <header className="result-head">
         <div>
-          <div className="result-word">{lookup.word}</div>
+          <div className="result-word">
+            <span>{lookup.word}</span>
+            {lookup.wordClass && (
+              <span className="word-class">{lookup.wordClass}</span>
+            )}
+          </div>
           <div className="result-date">{formatDate(lookup.createdAt)}</div>
         </div>
         <div className="result-actions">

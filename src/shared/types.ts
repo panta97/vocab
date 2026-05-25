@@ -1,6 +1,7 @@
 export interface Lookup {
   id: string
   word: string
+  wordClass: string
   paragraph: string
   explanation: string
   synonyms: string[]
