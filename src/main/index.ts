@@ -29,6 +29,27 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  win.webContents.on('context-menu', (_event, params) => {
+    const { editFlags, isEditable, selectionText } = params
+    const template: Electron.MenuItemConstructorOptions[] = []
+
+    if (isEditable) {
+      template.push(
+        { role: 'cut', enabled: editFlags.canCut },
+        { role: 'copy', enabled: editFlags.canCopy },
+        { role: 'paste', enabled: editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      )
+    } else if (selectionText.trim().length > 0) {
+      template.push({ role: 'copy' })
+    }
+
+    if (template.length > 0) {
+      Menu.buildFromTemplate(template).popup({ window: win })
+    }
+  })
+
   win.on('blur', () => {
     if (!win.webContents.isDevToolsOpened()) {
       win.hide()
