@@ -53,6 +53,58 @@ export async function lookupWord(req: LookupRequest): Promise<ApiResult<Lookup>>
   return { ok: true, data: rowToLookup(data) }
 }
 
+// Image types our OCR function (Claude vision) accepts.
+const OCR_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+// Keep payloads small enough for the edge function; base64 inflates ~33%.
+const OCR_MAX_BYTES = 8 * 1024 * 1024
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read file'))
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result !== 'string') {
+        reject(new Error('Unexpected file reader result'))
+        return
+      }
+      // Strip the "data:<mime>;base64," prefix — the function wants raw base64.
+      const comma = result.indexOf(',')
+      resolve(comma >= 0 ? result.slice(comma + 1) : result)
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+// Extracts text from an image via the ocr-image edge function. The selected
+// language is passed as a hint to improve accuracy. The image itself is never
+// stored — only the returned text is used.
+export async function extractTextFromImage(
+  file: File,
+  language: Language
+): Promise<ApiResult<string>> {
+  if (!OCR_ALLOWED_TYPES.includes(file.type)) {
+    return fail('Use a PNG, JPEG, WebP, or GIF image.')
+  }
+  if (file.size > OCR_MAX_BYTES) {
+    return fail('Image is too large (max 8 MB).')
+  }
+
+  try {
+    const image = await fileToBase64(file)
+    const { data, error } = await supabase.functions.invoke<{ text: string }>(
+      'ocr-image',
+      { body: { image, mediaType: file.type, language } }
+    )
+    if (error) return fail(error)
+    const text = data?.text?.trim() ?? ''
+    if (!text) return fail('No readable text found in that image.')
+    return { ok: true, data: text }
+  } catch (e) {
+    return fail(e)
+  }
+}
+
 export interface ListHistoryOptions {
   search?: string
   before?: string // ISO timestamp; returns rows older than this

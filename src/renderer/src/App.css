@@ -168,6 +168,41 @@ body,
   letter-spacing: 0.04em;
 }
 
+.paragraph-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+button.secondary.small {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.paragraph-drop {
+  position: relative;
+}
+
+.paragraph-drop.dragging .paragraph-input {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--input-bg));
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
 .paragraph-input {
   width: 100%;
   resize: vertical;
