@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Lookup } from '@shared/types'
 import { extractTextFromImage, lookupWord } from '../lib/api'
 import { prependCached } from '../lib/historyCache'
@@ -70,7 +70,7 @@ export function LookupView(): JSX.Element {
     await runOcr(file)
   }
 
-  function captureSelection(): void {
+  const captureSelection = useCallback((): void => {
     const ta = textareaRef.current
     if (!ta) return
     const { selectionStart, selectionEnd, value } = ta
@@ -79,7 +79,18 @@ export function LookupView(): JSX.Element {
       return
     }
     setSelectedWord(value.slice(selectionStart, selectionEnd).trim())
-  }
+  }, [])
+
+  // iOS Safari does not fire onSelect/onMouseUp/onKeyUp when text is selected
+  // via the native touch handles — it only emits document-level selectionchange.
+  // Listen for that and read the textarea's selection when it's the active field.
+  useEffect(() => {
+    function onSelectionChange(): void {
+      if (document.activeElement === textareaRef.current) captureSelection()
+    }
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => document.removeEventListener('selectionchange', onSelectionChange)
+  }, [captureSelection])
 
   async function onLookup(): Promise<void> {
     setError(null)
