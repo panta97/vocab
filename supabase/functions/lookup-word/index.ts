@@ -8,17 +8,31 @@ const MODEL = 'claude-sonnet-4-6'
 const MAX_TOKENS = 700
 const TOOL_NAME = 'record_word_lookup'
 
-const SYSTEM_PROMPT = `You are a vocabulary tutor helping a reader understand an English word they encountered while reading.
+// Supported target languages. Everything we produce stays in this language —
+// there is no translation step.
+const LANGUAGES: Record<string, string> = {
+  en: 'English',
+  es: 'Spanish',
+  fr: 'French'
+}
+const DEFAULT_LANGUAGE = 'en'
+
+function buildSystemPrompt(language: string): string {
+  const name = LANGUAGES[language] ?? LANGUAGES[DEFAULT_LANGUAGE]
+  return `You are a vocabulary tutor helping a reader understand a ${name} word they encountered while reading.
 
 The reader will give you:
-- a paragraph from a book
+- a paragraph from a book, written in ${name}
 - a word or phrase from that paragraph they don't understand
 
+Write everything you return entirely in ${name}. Do not translate into any other language and do not mix languages — the part of speech, explanation, synonyms and examples must all be in ${name}.
+
 Use the record_word_lookup tool to return:
-- word_class: The part of speech of the word as it's used in this paragraph — lowercase, e.g. "noun", "verb", "adjective", "adverb", "phrasal verb", "idiom", "proper noun". Pick the single best fit for the contextual usage.
-- explanation: 2 to 4 sentences explaining what the word means *as it is used in this specific paragraph*. Focus on contextual meaning, not generic dictionary definitions. Clear, simple English. Don't repeat the paragraph back.
-- synonyms: 3 to 5 simple words or short phrases that capture the same sense the word has in this paragraph. Prefer common words.
-- examples: 1 or 2 short, natural example sentences (not from the original paragraph) that use the word with the same sense.`
+- word_class: The part of speech of the word as it's used in this paragraph, written in ${name} and lowercase (for example, in English: "noun", "verb", "adjective", "adverb", "phrasal verb", "idiom", "proper noun"; use the equivalent grammatical terms in ${name}). Pick the single best fit for the contextual usage.
+- explanation: 2 to 4 sentences in ${name} explaining what the word means *as it is used in this specific paragraph*. Focus on contextual meaning, not generic dictionary definitions. Clear and simple. Don't repeat the paragraph back.
+- synonyms: 3 to 5 simple ${name} words or short phrases that capture the same sense the word has in this paragraph. Prefer common words.
+- examples: 1 or 2 short, natural ${name} example sentences (not from the original paragraph) that use the word with the same sense.`
+}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -60,7 +74,7 @@ Deno.serve(async (req) => {
   } = await supabase.auth.getUser()
   if (userErr || !user) return jsonError(401, 'Invalid session')
 
-  let body: { word?: unknown; paragraph?: unknown }
+  let body: { word?: unknown; paragraph?: unknown; language?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -69,6 +83,10 @@ Deno.serve(async (req) => {
 
   const word = typeof body.word === 'string' ? body.word.trim() : ''
   const paragraph = typeof body.paragraph === 'string' ? body.paragraph.trim() : ''
+  const language =
+    typeof body.language === 'string' && body.language in LANGUAGES
+      ? body.language
+      : DEFAULT_LANGUAGE
   if (!word) return jsonError(400, 'word is required')
   if (!paragraph) return jsonError(400, 'paragraph is required')
 
@@ -90,7 +108,7 @@ Word or phrase to explain: "${word}"`
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(language),
       tools: [
         {
           name: TOOL_NAME,
@@ -160,7 +178,8 @@ Word or phrase to explain: "${word}"`
       paragraph,
       explanation,
       synonyms,
-      examples
+      examples,
+      language
     })
     .select()
     .single()

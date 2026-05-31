@@ -3,6 +3,7 @@ import { LookupView } from './components/LookupView'
 import { HistoryView } from './components/HistoryView'
 import { SettingsView } from './components/SettingsView'
 import { AuthGate, AuthProvider } from './lib/auth'
+import { LanguageProvider } from './lib/language'
 
 type Tab = 'lookup' | 'history' | 'settings'
 
@@ -62,7 +63,9 @@ export function App(): JSX.Element {
   return (
     <AuthProvider>
       <AuthGate>
-        <Shell />
+        <LanguageProvider>
+          <Shell />
+        </LanguageProvider>
       </AuthGate>
     </AuthProvider>
   )

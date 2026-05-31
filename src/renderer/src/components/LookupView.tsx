@@ -2,9 +2,12 @@ import { useRef, useState } from 'react'
 import type { Lookup } from '@shared/types'
 import { lookupWord } from '../lib/api'
 import { prependCached } from '../lib/historyCache'
+import { useLanguage } from '../lib/language'
+import { LanguageSelector } from './LanguageSelector'
 import { ResultCard } from './ResultCard'
 
 export function LookupView(): JSX.Element {
+  const { language } = useLanguage()
   const [paragraph, setParagraph] = useState('')
   const [selectedWord, setSelectedWord] = useState('')
   const [result, setResult] = useState<Lookup | null>(null)
@@ -42,7 +45,7 @@ export function LookupView(): JSX.Element {
     }
 
     setLoading(true)
-    const res = await lookupWord({ word, paragraph })
+    const res = await lookupWord({ word, paragraph, language })
     setLoading(false)
 
     if (res.ok) {
@@ -55,6 +58,8 @@ export function LookupView(): JSX.Element {
 
   return (
     <div className="lookup">
+      <LanguageSelector disabled={loading} />
+
       <label className="label" htmlFor="paragraph">
         Paragraph
       </label>

@@ -7,12 +7,15 @@ import {
   removeCached,
   setCached
 } from '../lib/historyCache'
+import { useLanguage } from '../lib/language'
+import { LanguageSelector } from './LanguageSelector'
 import { ResultCard } from './ResultCard'
 
 const PAGE_SIZE = 20
 
 export function HistoryView(): JSX.Element {
-  const initial = getCached()
+  const { language } = useLanguage()
+  const initial = getCached(language)
   const [items, setItems] = useState<Lookup[]>(initial?.items ?? [])
   const [hasMore, setHasMore] = useState<boolean>(initial?.hasMore ?? false)
   const [search, setSearch] = useState('')
@@ -23,13 +26,13 @@ export function HistoryView(): JSX.Element {
   async function loadFirstPage(q?: string): Promise<void> {
     setError(null)
     setRefreshing(true)
-    const res = await listHistory({ search: q, limit: PAGE_SIZE })
+    const res = await listHistory({ search: q, limit: PAGE_SIZE, language })
     setRefreshing(false)
     if (res.ok) {
       const more = res.data.length === PAGE_SIZE
       setItems(res.data)
       setHasMore(more)
-      if (!q) setCached(res.data, more)
+      if (!q) setCached(res.data, more, language)
     } else {
       setError(res.error)
     }
@@ -43,7 +46,8 @@ export function HistoryView(): JSX.Element {
     const res = await listHistory({
       search: search.trim() || undefined,
       before: last.createdAt,
-      limit: PAGE_SIZE
+      limit: PAGE_SIZE,
+      language
     })
     setLoadingMore(false)
     if (res.ok) {
@@ -55,14 +59,23 @@ export function HistoryView(): JSX.Element {
   }
 
   // Load (or reload) the first page when:
-  //   - a search query changes, or
-  //   - no search and cache is stale/empty.
+  //   - a search query changes,
+  //   - the selected language changes, or
+  //   - no search and cache is stale/empty (cache is keyed by language).
   useEffect(() => {
     const q = search.trim() || undefined
-    if (!q && !isStale()) return
+    if (!q && !isStale(language)) {
+      // Switched back to a language whose page is still fresh — show it.
+      const cached = getCached(language)
+      if (cached) {
+        setItems(cached.items)
+        setHasMore(cached.hasMore)
+      }
+      return
+    }
     const t = setTimeout(() => void loadFirstPage(q), q ? 200 : 0)
     return () => clearTimeout(t)
-  }, [search])
+  }, [search, language])
 
   async function onDelete(id: string): Promise<void> {
     const res = await deleteLookup(id)
@@ -76,6 +89,7 @@ export function HistoryView(): JSX.Element {
 
   return (
     <div className="history">
+      <LanguageSelector disabled={refreshing} />
       <div className="history-toolbar">
         <input
           className="search"

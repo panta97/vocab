@@ -1,4 +1,4 @@
-import type { ApiResult, Lookup, LookupRequest } from '@shared/types'
+import type { ApiResult, Language, Lookup, LookupRequest } from '@shared/types'
 import { supabase } from './supabase'
 
 interface LookupRow {
@@ -9,7 +9,14 @@ interface LookupRow {
   explanation: string
   synonyms: string[] | null
   examples: string[] | null
+  language: string | null
   created_at: string
+}
+
+const KNOWN_LANGUAGES: Language[] = ['en', 'es', 'fr']
+
+function toLanguage(value: string | null): Language {
+  return KNOWN_LANGUAGES.includes(value as Language) ? (value as Language) : 'en'
 }
 
 function rowToLookup(row: LookupRow): Lookup {
@@ -21,6 +28,7 @@ function rowToLookup(row: LookupRow): Lookup {
     explanation: row.explanation,
     synonyms: row.synonyms ?? [],
     examples: row.examples ?? [],
+    language: toLanguage(row.language),
     createdAt: row.created_at
   }
 }
@@ -37,7 +45,7 @@ export async function lookupWord(req: LookupRequest): Promise<ApiResult<Lookup>>
   if (!paragraph) return fail('Paste a paragraph first.')
 
   const { data, error } = await supabase.functions.invoke<LookupRow>('lookup-word', {
-    body: { word, paragraph }
+    body: { word, paragraph, language: req.language }
   })
 
   if (error) return fail(error)
@@ -49,6 +57,7 @@ export interface ListHistoryOptions {
   search?: string
   before?: string // ISO timestamp; returns rows older than this
   limit?: number
+  language?: Language // when set, only return lookups in this language
 }
 
 export async function listHistory(
@@ -62,6 +71,10 @@ export async function listHistory(
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(limit)
+
+    if (opts.language) {
+      query = query.eq('language', opts.language)
+    }
 
     if (opts.before) {
       query = query.lt('created_at', opts.before)
