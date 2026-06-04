@@ -17,6 +17,8 @@ export interface Lookup {
   explanation: string
   synonyms: string[]
   examples: string[]
+  // Origin / history of the term. Empty until generated on demand.
+  etymology: string
   language: Language
   createdAt: string
 }

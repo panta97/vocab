@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { Lookup } from '@shared/types'
+import { generateEtymology } from '../lib/api'
+import { replaceCached } from '../lib/historyCache'
 
 interface Props {
   lookup: Lookup
@@ -14,6 +16,23 @@ function formatDate(iso: string): string {
 
 export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
   const [expanded, setExpanded] = useState(!compact)
+  // Etymology is filled in on demand; seed from the row and update after fetch.
+  const [etymology, setEtymology] = useState(lookup.etymology)
+  const [tracing, setTracing] = useState(false)
+  const [etyError, setEtyError] = useState<string | null>(null)
+
+  async function onTraceEtymology(): Promise<void> {
+    setEtyError(null)
+    setTracing(true)
+    const res = await generateEtymology(lookup.id)
+    setTracing(false)
+    if (res.ok) {
+      setEtymology(res.data.etymology)
+      replaceCached(res.data)
+    } else {
+      setEtyError(res.error)
+    }
+  }
   return (
     <article className="result-card">
       <header className="result-head">
@@ -69,6 +88,25 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
                   <li key={i}>{s}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {etymology ? (
+            <div className="result-section">
+              <div className="section-label">Etymology</div>
+              <div className="result-etymology">{etymology}</div>
+            </div>
+          ) : (
+            <div className="result-section">
+              <button
+                className="secondary small"
+                onClick={() => void onTraceEtymology()}
+                disabled={tracing}
+                title="Look up where this comes from"
+              >
+                {tracing ? 'Tracing…' : '✦ Trace etymology'}
+              </button>
+              {etyError && <div className="banner error">{etyError}</div>}
             </div>
           )}
 

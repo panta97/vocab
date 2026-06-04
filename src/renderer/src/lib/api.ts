@@ -17,6 +17,7 @@ interface LookupRow {
   explanation: string
   synonyms: string[] | null
   examples: string[] | null
+  etymology: string | null
   language: string | null
   created_at: string
 }
@@ -41,6 +42,7 @@ function rowToLookup(row: LookupRow): Lookup {
     explanation: row.explanation,
     synonyms: row.synonyms ?? [],
     examples: row.examples ?? [],
+    etymology: row.etymology ?? '',
     language: toLanguage(row.language),
     createdAt: row.created_at
   }
@@ -78,6 +80,20 @@ export async function lookupPhrase(
     'lookup-phrase',
     { body: { phrase, language: req.language } }
   )
+
+  if (error) return fail(error)
+  if (!data) return fail('Empty response from server.')
+  return { ok: true, data: rowToLookup(data) }
+}
+
+// Generates the etymology / origin for an existing lookup and stores it on the
+// row, returning the updated lookup. Called on demand from the result card.
+export async function generateEtymology(id: string): Promise<ApiResult<Lookup>> {
+  if (!id) return fail('Missing lookup id.')
+
+  const { data, error } = await supabase.functions.invoke<LookupRow>('etymology', {
+    body: { id }
+  })
 
   if (error) return fail(error)
   if (!data) return fail('Empty response from server.')

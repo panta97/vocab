@@ -69,6 +69,19 @@ export function prependCached(item: Lookup): void {
   }
 }
 
+// Replaces an item in place (same position) in every cached page that holds it.
+// Used when a lookup is updated without changing its recency, e.g. after its
+// etymology is generated.
+export function replaceCached(item: Lookup): void {
+  for (const [key, cache] of caches) {
+    if (!cache.items.some((i) => i.id === item.id)) continue
+    caches.set(key, {
+      ...cache,
+      items: cache.items.map((i) => (i.id === item.id ? item : i))
+    })
+  }
+}
+
 export function removeCached(id: string): void {
   for (const [key, cache] of caches) {
     caches.set(key, {
