@@ -106,10 +106,10 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
           )}
 
           {etymology ? (
-            <div className="result-section">
-              <div className="section-label">Etymology</div>
-              <div className="result-etymology">{etymology}</div>
-            </div>
+            <details className="result-etymology">
+              <summary>Etymology</summary>
+              <div className="etymology-body">{etymology}</div>
+            </details>
           ) : (
             <div className="result-section">
               <button

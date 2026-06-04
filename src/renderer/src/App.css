@@ -418,12 +418,23 @@ button.secondary:disabled {
 }
 
 .result-etymology {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.result-etymology summary {
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+}
+
+.etymology-body {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--border);
+  color: var(--muted);
   line-height: 1.5;
   white-space: pre-wrap;
-  font-size: 12.5px;
-  color: var(--muted);
-  border-left: 2px solid var(--border);
-  padding-left: 8px;
 }
 
 .result-section {
