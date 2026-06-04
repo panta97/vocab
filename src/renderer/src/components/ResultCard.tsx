@@ -14,6 +14,15 @@ function formatDate(iso: string): string {
   return isNaN(d.getTime()) ? iso : d.toLocaleString()
 }
 
+// Treat the row as edited only when updatedAt is meaningfully later than
+// createdAt (more than a second), to ignore insert-time clock jitter.
+function wasEdited(createdAt: string, updatedAt: string): boolean {
+  const created = new Date(createdAt).getTime()
+  const updated = new Date(updatedAt).getTime()
+  if (isNaN(created) || isNaN(updated)) return false
+  return updated - created > 1000
+}
+
 export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
   const [expanded, setExpanded] = useState(!compact)
   // Etymology is filled in on demand; seed from the row and update after fetch.
@@ -44,7 +53,12 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
               <span className="word-class">{lookup.wordClass}</span>
             )}
           </div>
-          <div className="result-date">{formatDate(lookup.createdAt)}</div>
+          <div className="result-date">
+            {formatDate(lookup.createdAt)}
+            {wasEdited(lookup.createdAt, lookup.updatedAt) && (
+              <span title={`Updated ${formatDate(lookup.updatedAt)}`}> · edited</span>
+            )}
+          </div>
         </div>
         <div className="result-actions">
           {compact && (

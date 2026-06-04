@@ -21,6 +21,9 @@ export interface Lookup {
   etymology: string
   language: Language
   createdAt: string
+  // Last modified time. Bumps on edits (e.g. when etymology is added);
+  // createdAt stays fixed.
+  updatedAt: string
 }
 
 export interface LookupRequest {

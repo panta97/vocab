@@ -20,6 +20,7 @@ interface LookupRow {
   etymology: string | null
   language: string | null
   created_at: string
+  updated_at: string | null
 }
 
 const KNOWN_LANGUAGES: Language[] = ['en', 'es', 'fr']
@@ -44,7 +45,8 @@ function rowToLookup(row: LookupRow): Lookup {
     examples: row.examples ?? [],
     etymology: row.etymology ?? '',
     language: toLanguage(row.language),
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at
   }
 }
 
