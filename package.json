@@ -14,6 +14,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "postinstall": "electron-builder install-app-deps",
     "package:mac": "electron-vite build && electron-builder --mac --config electron-builder.yml",
+    "postpackage:mac": "killall Vocab 2>/dev/null; rm -rf /Applications/Vocab.app && ditto dist/mac-arm64/Vocab.app /Applications/Vocab.app && echo '✓ Vocab.app installed to /Applications'",
     "dev:web": "vite -c vite.web.config.ts",
     "build:web": "vite build -c vite.web.config.ts",
     "preview:web": "vite preview -c vite.web.config.ts"

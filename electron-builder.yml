@@ -22,6 +22,11 @@ mac:
     - target: dmg
       arch:
         - arm64
+    # Also emit the unpacked Vocab.app (kept in dist/mac-arm64/) so the
+    # postpackage:mac script can copy it straight into /Applications.
+    - target: dir
+      arch:
+        - arm64
   category: public.app-category.education
   extendInfo:
     LSUIElement: true
