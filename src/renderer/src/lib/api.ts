@@ -1,9 +1,17 @@
-import type { ApiResult, Language, Lookup, LookupRequest } from '@shared/types'
+import type {
+  ApiResult,
+  Language,
+  Lookup,
+  LookupRequest,
+  LookupType,
+  PhraseLookupRequest
+} from '@shared/types'
 import { supabase } from './supabase'
 
 interface LookupRow {
   id: string
-  word: string
+  type: string | null
+  term: string
   word_class: string | null
   paragraph: string
   explanation: string
@@ -19,10 +27,15 @@ function toLanguage(value: string | null): Language {
   return KNOWN_LANGUAGES.includes(value as Language) ? (value as Language) : 'en'
 }
 
+function toType(value: string | null): LookupType {
+  return value === 'phrase' ? 'phrase' : 'word'
+}
+
 function rowToLookup(row: LookupRow): Lookup {
   return {
     id: row.id,
-    word: row.word,
+    type: toType(row.type),
+    term: row.term,
     wordClass: row.word_class ?? '',
     paragraph: row.paragraph,
     explanation: row.explanation,
@@ -47,6 +60,24 @@ export async function lookupWord(req: LookupRequest): Promise<ApiResult<Lookup>>
   const { data, error } = await supabase.functions.invoke<LookupRow>('lookup-word', {
     body: { word, paragraph, language: req.language }
   })
+
+  if (error) return fail(error)
+  if (!data) return fail('Empty response from server.')
+  return { ok: true, data: rowToLookup(data) }
+}
+
+// Looks up a standalone phrase / idiom — no paragraph, so the edge function
+// returns its most common meaning rather than a contextual one.
+export async function lookupPhrase(
+  req: PhraseLookupRequest
+): Promise<ApiResult<Lookup>> {
+  const phrase = req.phrase?.trim()
+  if (!phrase) return fail('Enter a phrase or idiom to look up.')
+
+  const { data, error } = await supabase.functions.invoke<LookupRow>(
+    'lookup-phrase',
+    { body: { phrase, language: req.language } }
+  )
 
   if (error) return fail(error)
   if (!data) return fail('Empty response from server.')
@@ -110,6 +141,7 @@ export interface ListHistoryOptions {
   before?: string // ISO timestamp; returns rows older than this
   limit?: number
   language?: Language // when set, only return lookups in this language
+  type?: LookupType // when set, only return lookups of this type (word/phrase)
 }
 
 export async function listHistory(
@@ -128,6 +160,10 @@ export async function listHistory(
       query = query.eq('language', opts.language)
     }
 
+    if (opts.type) {
+      query = query.eq('type', opts.type)
+    }
+
     if (opts.before) {
       query = query.lt('created_at', opts.before)
     }
@@ -135,7 +171,7 @@ export async function listHistory(
     const q = opts.search?.trim()
     if (q) {
       const safe = q.replace(/[%_]/g, '\\$&')
-      query = query.or(`word.ilike.%${safe}%,paragraph.ilike.%${safe}%`)
+      query = query.or(`term.ilike.%${safe}%,paragraph.ilike.%${safe}%`)
     }
 
     const { data, error } = await query

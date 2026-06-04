@@ -19,7 +19,8 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
       <header className="result-head">
         <div>
           <div className="result-word">
-            <span>{lookup.word}</span>
+            <span>{lookup.term}</span>
+            <span className={`type-badge ${lookup.type}`}>{lookup.type}</span>
             {lookup.wordClass && (
               <span className="word-class">{lookup.wordClass}</span>
             )}
@@ -71,10 +72,12 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
             </div>
           )}
 
-          <details className="result-paragraph">
-            <summary>Paragraph</summary>
-            <blockquote>{lookup.paragraph}</blockquote>
-          </details>
+          {lookup.type === 'word' && lookup.paragraph && (
+            <details className="result-paragraph">
+              <summary>Paragraph</summary>
+              <blockquote>{lookup.paragraph}</blockquote>
+            </details>
+          )}
         </>
       )}
     </article>

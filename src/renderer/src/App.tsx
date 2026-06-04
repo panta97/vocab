@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { LookupView } from './components/LookupView'
+import { PhraseView } from './components/PhraseView'
 import { HistoryView } from './components/HistoryView'
 import { SettingsView } from './components/SettingsView'
 import { AuthGate, AuthProvider } from './lib/auth'
 import { LanguageProvider } from './lib/language'
 
-type Tab = 'lookup' | 'history' | 'settings'
+type Tab = 'lookup' | 'phrases' | 'history' | 'settings'
 
 function Shell(): JSX.Element {
   const [tab, setTab] = useState<Tab>('lookup')
@@ -19,6 +20,12 @@ function Shell(): JSX.Element {
             onClick={() => setTab('lookup')}
           >
             Lookup
+          </button>
+          <button
+            className={tab === 'phrases' ? 'tab active' : 'tab'}
+            onClick={() => setTab('phrases')}
+          >
+            Phrases
           </button>
           <button
             className={tab === 'history' ? 'tab active' : 'tab'}
@@ -46,6 +53,7 @@ function Shell(): JSX.Element {
 
       <main className="app-body">
         {tab === 'lookup' && <LookupView />}
+        {tab === 'phrases' && <PhraseView />}
         {tab === 'history' && <HistoryView />}
         {tab === 'settings' && <SettingsView />}
       </main>

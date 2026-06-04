@@ -12,5 +12,8 @@ port = 54322
 [functions.lookup-word]
 verify_jwt = true
 
+[functions.lookup-phrase]
+verify_jwt = true
+
 [functions.ocr-image]
 verify_jwt = true

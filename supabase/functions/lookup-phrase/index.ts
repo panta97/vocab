@@ -1,12 +1,13 @@
-// Supabase Edge Function: lookup-word
-// POST { word, paragraph } → calls Claude, inserts row in `lookups`, returns the inserted row.
+// Supabase Edge Function: lookup-phrase
+// POST { phrase, language } → calls Claude for the phrase's most common meaning,
+// inserts a row in `lookups` (type 'phrase', no paragraph), returns the row.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.32.1'
 
 const MODEL = 'claude-sonnet-4-6'
 const MAX_TOKENS = 700
-const TOOL_NAME = 'record_word_lookup'
+const TOOL_NAME = 'record_phrase_lookup'
 
 // Supported target languages. Everything we produce stays in this language —
 // there is no translation step.
@@ -19,19 +20,17 @@ const DEFAULT_LANGUAGE = 'en'
 
 function buildSystemPrompt(language: string): string {
   const name = LANGUAGES[language] ?? LANGUAGES[DEFAULT_LANGUAGE]
-  return `You are a vocabulary tutor helping a reader understand a ${name} word they encountered while reading.
+  return `You are a vocabulary tutor helping a reader understand a ${name} idiom, fixed expression, or short phrase.
 
-The reader will give you:
-- a paragraph from a book, written in ${name}
-- a word or phrase from that paragraph they don't understand
+The reader will give you a phrase on its own, with no surrounding context. Because there is no context, explain its most common, widely-understood meaning — the sense a native speaker would assume first.
 
-Write everything you return entirely in ${name}. Do not translate into any other language and do not mix languages — the part of speech, explanation, synonyms and examples must all be in ${name}.
+Write everything you return entirely in ${name}. Do not translate into any other language and do not mix languages — the classification, explanation, synonyms and examples must all be in ${name}.
 
-Use the record_word_lookup tool to return:
-- word_class: The part of speech of the word as it's used in this paragraph, written in ${name} and lowercase (for example, in English: "noun", "verb", "adjective", "adverb", "phrasal verb", "idiom", "proper noun"; use the equivalent grammatical terms in ${name}). Pick the single best fit for the contextual usage.
-- explanation: 2 to 4 sentences in ${name} explaining what the word means *as it is used in this specific paragraph*. Focus on contextual meaning, not generic dictionary definitions. Clear and simple. Don't repeat the paragraph back.
-- synonyms: 3 to 5 simple ${name} words or short phrases that capture the same sense the word has in this paragraph. Prefer common words.
-- examples: 1 or 2 short, natural ${name} example sentences (not from the original paragraph) that use the word with the same sense.`
+Use the record_phrase_lookup tool to return:
+- word_class: How to classify the phrase, written in ${name} and lowercase (for example, in English: "idiom", "phrase", "phrasal verb", "collocation", "proverb"; use the equivalent terms in ${name}). Pick the single best fit.
+- explanation: 2 to 4 sentences in ${name} explaining the phrase's most common meaning. If it is figurative or idiomatic, make that clear. Clear and simple.
+- synonyms: 3 to 5 equivalent ${name} expressions or short paraphrases that capture the same meaning. Prefer common ones.
+- examples: 1 or 2 short, natural ${name} example sentences that use the phrase with that meaning.`
 }
 
 const CORS_HEADERS = {
@@ -74,30 +73,23 @@ Deno.serve(async (req) => {
   } = await supabase.auth.getUser()
   if (userErr || !user) return jsonError(401, 'Invalid session')
 
-  let body: { word?: unknown; paragraph?: unknown; language?: unknown }
+  let body: { phrase?: unknown; language?: unknown }
   try {
     body = await req.json()
   } catch {
     return jsonError(400, 'Invalid JSON body')
   }
 
-  const word = typeof body.word === 'string' ? body.word.trim() : ''
-  const paragraph = typeof body.paragraph === 'string' ? body.paragraph.trim() : ''
+  const phrase = typeof body.phrase === 'string' ? body.phrase.trim() : ''
   const language =
     typeof body.language === 'string' && body.language in LANGUAGES
       ? body.language
       : DEFAULT_LANGUAGE
-  if (!word) return jsonError(400, 'word is required')
-  if (!paragraph) return jsonError(400, 'paragraph is required')
+  if (!phrase) return jsonError(400, 'phrase is required')
 
   const anthropic = new Anthropic({ apiKey: anthropicKey })
 
-  const userMessage = `Paragraph:
-<paragraph>
-${paragraph}
-</paragraph>
-
-Word or phrase to explain: "${word}"`
+  const userMessage = `Phrase or idiom to explain: "${phrase}"`
 
   let explanation = ''
   let wordClass = ''
@@ -113,31 +105,31 @@ Word or phrase to explain: "${word}"`
         {
           name: TOOL_NAME,
           description:
-            'Record the contextual explanation, synonyms, and example sentences for the word.',
+            'Record the most common meaning, equivalent expressions, and example sentences for the phrase.',
           input_schema: {
             type: 'object',
             properties: {
               word_class: {
                 type: 'string',
                 description:
-                  "Part of speech of the word as used in this paragraph. Lowercase, e.g. 'noun', 'verb', 'adjective', 'adverb', 'phrasal verb', 'idiom', 'proper noun'."
+                  "How to classify the phrase. Lowercase, e.g. 'idiom', 'phrase', 'phrasal verb', 'collocation', 'proverb'."
               },
               explanation: {
                 type: 'string',
                 description:
-                  "2 to 4 sentences explaining the word's meaning in this paragraph."
+                  "2 to 4 sentences explaining the phrase's most common meaning."
               },
               synonyms: {
                 type: 'array',
                 items: { type: 'string' },
                 description:
-                  'Three to five simple synonyms or similar words matching the contextual sense.'
+                  'Three to five equivalent expressions or short paraphrases with the same meaning.'
               },
               examples: {
                 type: 'array',
                 items: { type: 'string' },
                 description:
-                  'One or two short example sentences using the word in the same sense.'
+                  'One or two short example sentences using the phrase with that meaning.'
               }
             },
             required: ['word_class', 'explanation', 'synonyms', 'examples']
@@ -173,10 +165,10 @@ Word or phrase to explain: "${word}"`
     .from('lookups')
     .insert({
       user_id: user.id,
-      type: 'word',
-      term: word,
+      type: 'phrase',
+      term: phrase,
       word_class: wordClass,
-      paragraph,
+      paragraph: '',
       explanation,
       synonyms,
       examples,

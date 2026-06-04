@@ -2,10 +2,17 @@
 // we never translate between them.
 export type Language = 'en' | 'es' | 'fr'
 
+// A lookup is either a single 'word' explained in the context of a paragraph,
+// or a standalone 'phrase'/idiom explained by its most common meaning.
+export type LookupType = 'word' | 'phrase'
+
 export interface Lookup {
   id: string
-  word: string
+  type: LookupType
+  // The headword: the looked-up word, or the whole phrase/idiom.
+  term: string
   wordClass: string
+  // Source context for word lookups; empty for standalone phrases.
   paragraph: string
   explanation: string
   synonyms: string[]
@@ -17,6 +24,13 @@ export interface Lookup {
 export interface LookupRequest {
   word: string
   paragraph: string
+  language: Language
+}
+
+// A phrase is pasted on its own — no paragraph, so we explain its most common
+// meaning rather than a contextual one.
+export interface PhraseLookupRequest {
+  phrase: string
   language: Language
 }
 

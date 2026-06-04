@@ -5,7 +5,8 @@ import {
   getCached,
   isStale,
   removeCached,
-  setCached
+  setCached,
+  type HistoryFilter
 } from '../lib/historyCache'
 import { useLanguage } from '../lib/language'
 import { LanguageSelector } from './LanguageSelector'
@@ -13,9 +14,16 @@ import { ResultCard } from './ResultCard'
 
 const PAGE_SIZE = 20
 
+const FILTER_OPTIONS: { value: HistoryFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'word', label: 'Words' },
+  { value: 'phrase', label: 'Phrases' }
+]
+
 export function HistoryView(): JSX.Element {
   const { language } = useLanguage()
-  const initial = getCached(language)
+  const [filter, setFilter] = useState<HistoryFilter>('all')
+  const initial = getCached(language, 'all')
   const [items, setItems] = useState<Lookup[]>(initial?.items ?? [])
   const [hasMore, setHasMore] = useState<boolean>(initial?.hasMore ?? false)
   const [search, setSearch] = useState('')
@@ -23,16 +31,24 @@ export function HistoryView(): JSX.Element {
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
 
+  // Type filter to pass to the API: undefined means "all types".
+  const typeFilter = filter === 'all' ? undefined : filter
+
   async function loadFirstPage(q?: string): Promise<void> {
     setError(null)
     setRefreshing(true)
-    const res = await listHistory({ search: q, limit: PAGE_SIZE, language })
+    const res = await listHistory({
+      search: q,
+      limit: PAGE_SIZE,
+      language,
+      type: typeFilter
+    })
     setRefreshing(false)
     if (res.ok) {
       const more = res.data.length === PAGE_SIZE
       setItems(res.data)
       setHasMore(more)
-      if (!q) setCached(res.data, more, language)
+      if (!q) setCached(res.data, more, language, filter)
     } else {
       setError(res.error)
     }
@@ -47,7 +63,8 @@ export function HistoryView(): JSX.Element {
       search: search.trim() || undefined,
       before: last.createdAt,
       limit: PAGE_SIZE,
-      language
+      language,
+      type: typeFilter
     })
     setLoadingMore(false)
     if (res.ok) {
@@ -60,13 +77,13 @@ export function HistoryView(): JSX.Element {
 
   // Load (or reload) the first page when:
   //   - a search query changes,
-  //   - the selected language changes, or
-  //   - no search and cache is stale/empty (cache is keyed by language).
+  //   - the selected language or type filter changes, or
+  //   - no search and cache is stale/empty (cache is keyed by language+filter).
   useEffect(() => {
     const q = search.trim() || undefined
-    if (!q && !isStale(language)) {
-      // Switched back to a language whose page is still fresh — show it.
-      const cached = getCached(language)
+    if (!q && !isStale(language, filter)) {
+      // Switched back to a page that's still fresh — show it.
+      const cached = getCached(language, filter)
       if (cached) {
         setItems(cached.items)
         setHasMore(cached.hasMore)
@@ -75,7 +92,7 @@ export function HistoryView(): JSX.Element {
     }
     const t = setTimeout(() => void loadFirstPage(q), q ? 200 : 0)
     return () => clearTimeout(t)
-  }, [search, language])
+  }, [search, language, filter])
 
   async function onDelete(id: string): Promise<void> {
     const res = await deleteLookup(id)
@@ -90,10 +107,23 @@ export function HistoryView(): JSX.Element {
   return (
     <div className="history">
       <LanguageSelector disabled={refreshing} />
+      <div className="type-filter" role="radiogroup" aria-label="Lookup type">
+        {FILTER_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            className={filter === opt.value ? 'type-option active' : 'type-option'}
+            role="radio"
+            aria-checked={filter === opt.value}
+            onClick={() => setFilter(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
       <div className="history-toolbar">
         <input
           className="search"
-          placeholder="Search words or paragraphs…"
+          placeholder="Search words or phrases…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
