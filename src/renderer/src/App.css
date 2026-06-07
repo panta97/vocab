@@ -199,6 +199,12 @@ body,
   gap: 8px;
 }
 
+.paragraph-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 button.secondary.small {
   padding: 4px 9px;
   font-size: 12px;

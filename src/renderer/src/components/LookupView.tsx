@@ -32,6 +32,21 @@ export function LookupView(): JSX.Element {
     }
   }
 
+  async function onPaste(): Promise<void> {
+    setError(null)
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text.trim()) {
+        setError('Clipboard is empty.')
+        return
+      }
+      setParagraph(text)
+      setSelectedWord('')
+    } catch {
+      setError('Could not read the clipboard.')
+    }
+  }
+
   async function onImageSelected(
     e: React.ChangeEvent<HTMLInputElement>
   ): Promise<void> {
@@ -137,14 +152,24 @@ export function LookupView(): JSX.Element {
           hidden
           onChange={(e) => void onImageSelected(e)}
         />
-        <button
-          className="secondary small"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={extracting || loading}
-          title="Extract text from an image using OCR"
-        >
-          {extracting ? 'Extracting…' : '📷 Extract text from image'}
-        </button>
+        <div className="paragraph-head-actions">
+          <button
+            className="secondary small"
+            onClick={() => void onPaste()}
+            disabled={extracting || loading}
+            title="Paste the latest copied text"
+          >
+            📋 Paste
+          </button>
+          <button
+            className="secondary small"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={extracting || loading}
+            title="Extract text from an image using OCR"
+          >
+            {extracting ? 'Extracting…' : '📷 Extract text from image'}
+          </button>
+        </div>
       </div>
       <div
         className={dragging ? 'paragraph-drop dragging' : 'paragraph-drop'}

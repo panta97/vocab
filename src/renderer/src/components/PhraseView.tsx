@@ -13,6 +13,20 @@ export function PhraseView(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  async function onPaste(): Promise<void> {
+    setError(null)
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text.trim()) {
+        setError('Clipboard is empty.')
+        return
+      }
+      setPhrase(text)
+    } catch {
+      setError('Could not read the clipboard.')
+    }
+  }
+
   async function onLookup(): Promise<void> {
     setError(null)
     setResult(null)
@@ -43,6 +57,14 @@ export function PhraseView(): JSX.Element {
         <label className="label" htmlFor="phrase">
           Idiom or phrase
         </label>
+        <button
+          className="secondary small"
+          onClick={() => void onPaste()}
+          disabled={loading}
+          title="Paste the latest copied text"
+        >
+          📋 Paste
+        </button>
       </div>
       <textarea
         id="phrase"
