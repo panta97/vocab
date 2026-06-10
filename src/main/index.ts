@@ -29,6 +29,10 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // Show on whichever Space (Desktop) is currently active, instead of yanking the
+  // user back to the Space where the window first appeared.
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
   win.webContents.on('context-menu', (_event, params) => {
     const { editFlags, isEditable, selectionText } = params
     const template: Electron.MenuItemConstructorOptions[] = []
