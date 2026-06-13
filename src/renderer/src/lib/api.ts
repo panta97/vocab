@@ -7,6 +7,12 @@ import type {
   PhraseLookupRequest
 } from '@shared/types'
 import { supabase } from './supabase'
+import {
+  LOCAL_MODE,
+  localDeleteLookup,
+  localInvoke,
+  localListHistory
+} from './local'
 
 interface LookupRow {
   id: string
@@ -61,9 +67,15 @@ export async function lookupWord(req: LookupRequest): Promise<ApiResult<Lookup>>
   if (!word) return fail('Highlight the word you want to look up.')
   if (!paragraph) return fail('Paste a paragraph first.')
 
-  const { data, error } = await supabase.functions.invoke<LookupRow>('lookup-word', {
-    body: { word, paragraph, language: req.language }
-  })
+  const { data, error } = LOCAL_MODE
+    ? await localInvoke<LookupRow>('lookup-word', {
+        word,
+        paragraph,
+        language: req.language
+      })
+    : await supabase.functions.invoke<LookupRow>('lookup-word', {
+        body: { word, paragraph, language: req.language }
+      })
 
   if (error) return fail(error)
   if (!data) return fail('Empty response from server.')
@@ -78,10 +90,14 @@ export async function lookupPhrase(
   const phrase = req.phrase?.trim()
   if (!phrase) return fail('Enter a phrase or idiom to look up.')
 
-  const { data, error } = await supabase.functions.invoke<LookupRow>(
-    'lookup-phrase',
-    { body: { phrase, language: req.language } }
-  )
+  const { data, error } = LOCAL_MODE
+    ? await localInvoke<LookupRow>('lookup-phrase', {
+        phrase,
+        language: req.language
+      })
+    : await supabase.functions.invoke<LookupRow>('lookup-phrase', {
+        body: { phrase, language: req.language }
+      })
 
   if (error) return fail(error)
   if (!data) return fail('Empty response from server.')
@@ -93,9 +109,9 @@ export async function lookupPhrase(
 export async function generateEtymology(id: string): Promise<ApiResult<Lookup>> {
   if (!id) return fail('Missing lookup id.')
 
-  const { data, error } = await supabase.functions.invoke<LookupRow>('etymology', {
-    body: { id }
-  })
+  const { data, error } = LOCAL_MODE
+    ? await localInvoke<LookupRow>('etymology', { id })
+    : await supabase.functions.invoke<LookupRow>('etymology', { body: { id } })
 
   if (error) return fail(error)
   if (!data) return fail('Empty response from server.')
@@ -141,10 +157,15 @@ export async function extractTextFromImage(
 
   try {
     const image = await fileToBase64(file)
-    const { data, error } = await supabase.functions.invoke<{ text: string }>(
-      'ocr-image',
-      { body: { image, mediaType: file.type, language } }
-    )
+    const { data, error } = LOCAL_MODE
+      ? await localInvoke<{ text: string }>('ocr-image', {
+          image,
+          mediaType: file.type,
+          language
+        })
+      : await supabase.functions.invoke<{ text: string }>('ocr-image', {
+          body: { image, mediaType: file.type, language }
+        })
     if (error) return fail(error)
     const text = data?.text?.trim() ?? ''
     if (!text) return fail('No readable text found in that image.')
@@ -166,6 +187,13 @@ export async function listHistory(
   opts: ListHistoryOptions = {}
 ): Promise<ApiResult<Lookup[]>> {
   const limit = opts.limit ?? 20
+
+  if (LOCAL_MODE) {
+    const { data, error } = await localListHistory<LookupRow>({ ...opts, limit })
+    if (error) return fail(error)
+    return { ok: true, data: (data ?? []).map(rowToLookup) }
+  }
+
   try {
     let query = supabase
       .from('lookups')
@@ -201,6 +229,12 @@ export async function listHistory(
 }
 
 export async function deleteLookup(id: string): Promise<ApiResult<void>> {
+  if (LOCAL_MODE) {
+    const { error } = await localDeleteLookup(id)
+    if (error) return fail(error)
+    return { ok: true, data: undefined }
+  }
+
   try {
     const { error } = await supabase.from('lookups').delete().eq('id', id)
     if (error) return fail(error.message)

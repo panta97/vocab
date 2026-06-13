@@ -26,6 +26,39 @@ npm run dev:web      # Browser version (Vite on :5174, LAN-accessible)
 
 Both connect to the same Supabase backend. Sign in once on each, history syncs.
 
+## Run fully locally (test before deploying)
+
+A local dev server (`dev-server/`) stands in for the whole Supabase backend — no Docker, no Supabase CLI. It serves the same four function endpoints (calling Claude with the key in `.api-key`) and stores history in a local Postgres database (`vocab_dev`) created from the **real** `supabase/migrations/*.sql` files. Prompts and tool schemas are imported from `supabase/functions/_shared/` — the same modules the deployed edge functions use — so local behavior tracks prod.
+
+Requirements: Homebrew Postgres running (`brew services start postgresql@14`) and your Anthropic key in `.api-key` at the repo root.
+
+```bash
+npm run dev:local    # dev server + Electron app together
+npm run dev:server   # just the dev server (http://127.0.0.1:8787)
+```
+
+Local mode is switched by `VITE_LOCAL_API_URL` in `.env.development.local` (gitignored, dev-only — production builds never see it). In local mode the sign-in screen is skipped and everything runs as a fixed local user (`local@dev`). Comment the variable out to run `npm run dev` against the real Supabase project again.
+
+New migrations added to `supabase/migrations/` are applied automatically the next time the dev server starts.
+
+### Inspect the local database
+
+Connect with DBeaver (or any Postgres client) using:
+
+| Field    | Value                                  |
+| -------- | -------------------------------------- |
+| Host     | `127.0.0.1`                            |
+| Port     | `5432`                                 |
+| Database | `vocab_dev`                            |
+| Username | your macOS username                    |
+| Password | _(empty — Homebrew Postgres trusts local connections)_ |
+
+Or from the terminal: `psql vocab_dev`.
+
+Inside you'll find `public.lookups` (the lookup history), `public._local_migrations` (which migration files have been applied), and `auth.users` (local stand-in for Supabase auth, holding the single `local@dev` user). Postgres runs as a Homebrew service, so this works even when the dev server isn't running.
+
+To pull your real lookup history from prod into the local database, see [`docs/local-data-import.md`](docs/local-data-import.md).
+
 ## Use it
 
 1. Open the app (click the tray icon on Mac, or visit the URL in a browser).

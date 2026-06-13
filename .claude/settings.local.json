@@ -28,7 +28,11 @@
       "Bash(supabase secrets *)",
       "Bash(supabase functions *)",
       "Bash(pkill -f \"electron-vite\")",
-      "Bash(pkill -f \"vocab\")"
+      "Bash(pkill -f \"vocab\")",
+      "Bash(docker info *)",
+      "Bash(supabase start *)",
+      "Bash(supabase status *)",
+      "Bash(docker exec supabase_db_spvoiygpducryabaxkjl *)"
     ]
   }
 }

@@ -1,36 +1,22 @@
 // Supabase Edge Function: etymology
 // POST { id } → loads the lookup, asks Claude for the term's origin/history,
 // stores it on the row's `etymology` column, and returns the updated row.
+//
+// Prompt, tool schema, and parsing live in ../_shared so the local dev server
+// (dev-server/) stays in lockstep with what we deploy.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.32.1'
 
-const MODEL = 'claude-sonnet-4-6'
-const MAX_TOKENS = 600
-const TOOL_NAME = 'record_etymology'
-
-// Supported target languages. The etymology is written in the lookup's own
-// language — there is no translation step.
-const LANGUAGES: Record<string, string> = {
-  en: 'English',
-  es: 'Spanish',
-  fr: 'French'
-}
-const DEFAULT_LANGUAGE = 'en'
-
-function buildSystemPrompt(language: string, isPhrase: boolean): string {
-  const name = LANGUAGES[language] ?? LANGUAGES[DEFAULT_LANGUAGE]
-  const focus = isPhrase
-    ? `The term is a phrase or expression. Trace its origin, focusing on its key or most distinctive word(s) and how the whole expression came to mean what it does.`
-    : `Trace the origin of the word: its roots and components, and how its current meaning developed.`
-  return `You are an etymologist explaining where a ${name} word or expression comes from.
-
-Write everything entirely in ${name}. Do not translate into any other language and do not mix languages.
-
-${focus}
-
-Use the record_etymology tool to return a concise etymology of 2 to 5 sentences: the origin and component parts, and how the meaning evolved, with approximate dates or periods where they are known. Keep it factual and readable. If the origin is genuinely uncertain or disputed, say so briefly rather than inventing details.`
-}
+import { MODEL, extractToolInput } from '../_shared/claude.ts'
+import { resolveLanguage } from '../_shared/languages.ts'
+import {
+  MAX_TOKENS,
+  TOOL,
+  TOOL_NAME,
+  buildSystemPrompt,
+  buildUserMessage
+} from '../_shared/etymology.ts'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -95,15 +81,10 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(lookup), { headers: JSON_HEADERS })
   }
 
-  const language =
-    typeof lookup.language === 'string' && lookup.language in LANGUAGES
-      ? lookup.language
-      : DEFAULT_LANGUAGE
+  const language = resolveLanguage(lookup.language)
   const isPhrase = lookup.type === 'phrase'
 
   const anthropic = new Anthropic({ apiKey: anthropicKey })
-
-  const userMessage = `Term to trace: "${lookup.term}"`
 
   let etymology = ''
 
@@ -112,33 +93,15 @@ Deno.serve(async (req) => {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: buildSystemPrompt(language, isPhrase),
-      tools: [
-        {
-          name: TOOL_NAME,
-          description: 'Record the etymology / origin of the term.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              etymology: {
-                type: 'string',
-                description:
-                  "2 to 5 sentences on the term's origin, components, and how its meaning developed, with approximate dates where known."
-              }
-            },
-            required: ['etymology']
-          }
-        }
-      ],
+      tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL_NAME },
-      messages: [{ role: 'user', content: userMessage }]
+      messages: [{ role: 'user', content: buildUserMessage(lookup.term) }]
     })
 
-    const toolUse = response.content.find((b) => b.type === 'tool_use') as
-      | { type: 'tool_use'; input: Record<string, unknown> }
-      | undefined
-    if (!toolUse) return jsonError(502, 'Claude did not return a structured response')
+    const input = extractToolInput(response.content)
+    if (!input) return jsonError(502, 'Claude did not return a structured response')
 
-    etymology = String(toolUse.input.etymology ?? '').trim()
+    etymology = String(input.etymology ?? '').trim()
     if (!etymology) return jsonError(502, 'Claude returned an empty etymology')
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

@@ -1,37 +1,23 @@
 // Supabase Edge Function: lookup-phrase
 // POST { phrase, language } → calls Claude for the phrase's most common meaning,
 // inserts a row in `lookups` (type 'phrase', no paragraph), returns the row.
+//
+// Prompt, tool schema, and parsing live in ../_shared so the local dev server
+// (dev-server/) stays in lockstep with what we deploy.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.32.1'
 
-const MODEL = 'claude-sonnet-4-6'
-const MAX_TOKENS = 700
-const TOOL_NAME = 'record_phrase_lookup'
-
-// Supported target languages. Everything we produce stays in this language —
-// there is no translation step.
-const LANGUAGES: Record<string, string> = {
-  en: 'English',
-  es: 'Spanish',
-  fr: 'French'
-}
-const DEFAULT_LANGUAGE = 'en'
-
-function buildSystemPrompt(language: string): string {
-  const name = LANGUAGES[language] ?? LANGUAGES[DEFAULT_LANGUAGE]
-  return `You are a vocabulary tutor helping a reader understand a ${name} idiom, fixed expression, or short phrase.
-
-The reader will give you a phrase on its own, with no surrounding context. Because there is no context, explain its most common, widely-understood meaning — the sense a native speaker would assume first.
-
-Write everything you return entirely in ${name}. Do not translate into any other language and do not mix languages — the classification, explanation, synonyms and examples must all be in ${name}.
-
-Use the record_phrase_lookup tool to return:
-- word_class: How to classify the phrase, written in ${name} and lowercase (for example, in English: "idiom", "phrase", "phrasal verb", "collocation", "proverb"; use the equivalent terms in ${name}). Pick the single best fit.
-- explanation: 2 to 4 sentences in ${name} explaining the phrase's most common meaning. If it is figurative or idiomatic, make that clear. Clear and simple.
-- synonyms: 3 to 5 equivalent ${name} expressions or short paraphrases that capture the same meaning. Prefer common ones.
-- examples: 1 or 2 short, natural ${name} example sentences that use the phrase with that meaning.`
-}
+import { MODEL, extractToolInput } from '../_shared/claude.ts'
+import { resolveLanguage } from '../_shared/languages.ts'
+import { parseLookupInput } from '../_shared/lookup-parse.ts'
+import {
+  MAX_TOKENS,
+  TOOL,
+  TOOL_NAME,
+  buildSystemPrompt,
+  buildUserMessage
+} from '../_shared/lookup-phrase.ts'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -81,15 +67,10 @@ Deno.serve(async (req) => {
   }
 
   const phrase = typeof body.phrase === 'string' ? body.phrase.trim() : ''
-  const language =
-    typeof body.language === 'string' && body.language in LANGUAGES
-      ? body.language
-      : DEFAULT_LANGUAGE
+  const language = resolveLanguage(body.language)
   if (!phrase) return jsonError(400, 'phrase is required')
 
   const anthropic = new Anthropic({ apiKey: anthropicKey })
-
-  const userMessage = `Phrase or idiom to explain: "${phrase}"`
 
   let explanation = ''
   let wordClass = ''
@@ -101,59 +82,19 @@ Deno.serve(async (req) => {
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: buildSystemPrompt(language),
-      tools: [
-        {
-          name: TOOL_NAME,
-          description:
-            'Record the most common meaning, equivalent expressions, and example sentences for the phrase.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              word_class: {
-                type: 'string',
-                description:
-                  "How to classify the phrase. Lowercase, e.g. 'idiom', 'phrase', 'phrasal verb', 'collocation', 'proverb'."
-              },
-              explanation: {
-                type: 'string',
-                description:
-                  "2 to 4 sentences explaining the phrase's most common meaning."
-              },
-              synonyms: {
-                type: 'array',
-                items: { type: 'string' },
-                description:
-                  'Three to five equivalent expressions or short paraphrases with the same meaning.'
-              },
-              examples: {
-                type: 'array',
-                items: { type: 'string' },
-                description:
-                  'One or two short example sentences using the phrase with that meaning.'
-              }
-            },
-            required: ['word_class', 'explanation', 'synonyms', 'examples']
-          }
-        }
-      ],
+      tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL_NAME },
-      messages: [{ role: 'user', content: userMessage }]
+      messages: [{ role: 'user', content: buildUserMessage(phrase) }]
     })
 
-    const toolUse = response.content.find((b) => b.type === 'tool_use') as
-      | { type: 'tool_use'; input: Record<string, unknown> }
-      | undefined
-    if (!toolUse) return jsonError(502, 'Claude did not return a structured response')
+    const input = extractToolInput(response.content)
+    if (!input) return jsonError(502, 'Claude did not return a structured response')
 
-    const input = toolUse.input
-    wordClass = String(input.word_class ?? '').trim().toLowerCase()
-    explanation = String(input.explanation ?? '').trim()
-    synonyms = Array.isArray(input.synonyms)
-      ? input.synonyms.map((s) => String(s).trim()).filter(Boolean)
-      : []
-    examples = Array.isArray(input.examples)
-      ? input.examples.map((s) => String(s).trim()).filter(Boolean)
-      : []
+    const parsed = parseLookupInput(input)
+    wordClass = parsed.wordClass
+    explanation = parsed.explanation
+    synonyms = parsed.synonyms
+    examples = parsed.examples
 
     if (!explanation) return jsonError(502, 'Claude returned an empty explanation')
   } catch (e) {

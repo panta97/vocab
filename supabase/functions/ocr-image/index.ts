@@ -2,41 +2,21 @@
 // POST { image (base64, no data: prefix), mediaType, language } → calls Claude
 // vision, returns { text } with the text read from the image.
 // We never store the uploaded image — only the extracted text is returned.
+//
+// Prompt and constraints live in ../_shared so the local dev server
+// (dev-server/) stays in lockstep with what we deploy.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.32.1'
 
-const MODEL = 'claude-sonnet-4-6'
-const MAX_TOKENS = 2000
-
-// Languages we can hint Claude with. Matches the front-end target languages.
-const LANGUAGES: Record<string, string> = {
-  en: 'English',
-  es: 'Spanish',
-  fr: 'French'
-}
-const DEFAULT_LANGUAGE = 'en'
-
-// Image media types Claude vision accepts.
-const ALLOWED_MEDIA_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif'
-])
-
-function buildSystemPrompt(language: string): string {
-  const name = LANGUAGES[language] ?? LANGUAGES[DEFAULT_LANGUAGE]
-  return `You extract text from images of book pages, screenshots, and photos for a reader.
-
-The text in the image is most likely written in ${name} — use that as a hint to read ambiguous characters and accents correctly, but transcribe whatever language actually appears.
-
-Rules:
-- Transcribe the text exactly as written. Do not translate, summarize, correct, or add commentary.
-- Preserve the natural paragraph breaks. Join lines that are only wrapped mid-sentence into a single paragraph.
-- If the image contains no readable text, return an empty string.
-- Output only the transcribed text — no preamble, labels, or quotation marks.`
-}
+import { MODEL, extractTextContent } from '../_shared/claude.ts'
+import { resolveLanguage } from '../_shared/languages.ts'
+import {
+  ALLOWED_MEDIA_TYPES,
+  MAX_TOKENS,
+  USER_INSTRUCTION,
+  buildSystemPrompt
+} from '../_shared/ocr.ts'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -87,10 +67,7 @@ Deno.serve(async (req) => {
 
   const image = typeof body.image === 'string' ? body.image.trim() : ''
   const mediaType = typeof body.mediaType === 'string' ? body.mediaType : ''
-  const language =
-    typeof body.language === 'string' && body.language in LANGUAGES
-      ? body.language
-      : DEFAULT_LANGUAGE
+  const language = resolveLanguage(body.language)
 
   if (!image) return jsonError(400, 'image is required')
   if (!ALLOWED_MEDIA_TYPES.has(mediaType)) {
@@ -121,20 +98,13 @@ Deno.serve(async (req) => {
                 data: image
               }
             },
-            {
-              type: 'text',
-              text: 'Transcribe all the text in this image following your instructions.'
-            }
+            { type: 'text', text: USER_INSTRUCTION }
           ]
         }
       ]
     })
 
-    text = response.content
-      .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-      .map((b) => b.text)
-      .join('')
-      .trim()
+    text = extractTextContent(response.content)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return jsonError(502, `OCR failed: ${msg}`)

@@ -1,7 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured } from './supabase'
+import { LOCAL_MODE, LOCAL_USER } from './local'
 import { clearCache as clearHistoryCache } from './historyCache'
+
+// In local dev mode there is no Supabase auth — the app runs as a fixed local
+// user. Only `session.user.email` is ever read from the session object.
+const LOCAL_SESSION = LOCAL_MODE ? ({ user: LOCAL_USER } as unknown as Session) : null
 
 interface AuthState {
   session: Session | null
@@ -20,10 +25,11 @@ export function useAuth(): AuthState {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }): JSX.Element {
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [session, setSession] = useState<Session | null>(LOCAL_SESSION)
+  const [loading, setLoading] = useState(!LOCAL_MODE)
 
   useEffect(() => {
+    if (LOCAL_MODE) return
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       setLoading(false)
@@ -35,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
   }, [])
 
   async function signOut(): Promise<void> {
-    await supabase.auth.signOut()
+    if (!LOCAL_MODE) await supabase.auth.signOut()
     clearHistoryCache()
   }
 
@@ -49,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
 export function AuthGate({ children }: { children: React.ReactNode }): JSX.Element {
   const { session, loading } = useAuth()
 
-  if (!supabaseConfigured) {
+  if (!supabaseConfigured && !LOCAL_MODE) {
     return (
       <div className="auth-screen">
         <h1>Setup needed</h1>

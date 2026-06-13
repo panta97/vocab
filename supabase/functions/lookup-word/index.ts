@@ -1,38 +1,22 @@
 // Supabase Edge Function: lookup-word
 // POST { word, paragraph } → calls Claude, inserts row in `lookups`, returns the inserted row.
+//
+// Prompt, tool schema, and parsing live in ../_shared so the local dev server
+// (dev-server/) stays in lockstep with what we deploy.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import Anthropic from 'npm:@anthropic-ai/sdk@0.32.1'
 
-const MODEL = 'claude-sonnet-4-6'
-const MAX_TOKENS = 700
-const TOOL_NAME = 'record_word_lookup'
-
-// Supported target languages. Everything we produce stays in this language —
-// there is no translation step.
-const LANGUAGES: Record<string, string> = {
-  en: 'English',
-  es: 'Spanish',
-  fr: 'French'
-}
-const DEFAULT_LANGUAGE = 'en'
-
-function buildSystemPrompt(language: string): string {
-  const name = LANGUAGES[language] ?? LANGUAGES[DEFAULT_LANGUAGE]
-  return `You are a vocabulary tutor helping a reader understand a ${name} word they encountered while reading.
-
-The reader will give you:
-- a paragraph from a book, written in ${name}
-- a word or phrase from that paragraph they don't understand
-
-Write everything you return entirely in ${name}. Do not translate into any other language and do not mix languages — the part of speech, explanation, synonyms and examples must all be in ${name}.
-
-Use the record_word_lookup tool to return:
-- word_class: The part of speech of the word as it's used in this paragraph, written in ${name} and lowercase (for example, in English: "noun", "verb", "adjective", "adverb", "phrasal verb", "idiom", "proper noun"; use the equivalent grammatical terms in ${name}). Pick the single best fit for the contextual usage.
-- explanation: 2 to 4 sentences in ${name} explaining what the word means *as it is used in this specific paragraph*. Focus on contextual meaning, not generic dictionary definitions. Clear and simple. Don't repeat the paragraph back.
-- synonyms: 3 to 5 simple ${name} words or short phrases that capture the same sense the word has in this paragraph. Prefer common words.
-- examples: 1 or 2 short, natural ${name} example sentences (not from the original paragraph) that use the word with the same sense.`
-}
+import { MODEL, extractToolInput } from '../_shared/claude.ts'
+import { resolveLanguage } from '../_shared/languages.ts'
+import { parseLookupInput } from '../_shared/lookup-parse.ts'
+import {
+  MAX_TOKENS,
+  TOOL,
+  TOOL_NAME,
+  buildSystemPrompt,
+  buildUserMessage
+} from '../_shared/lookup-word.ts'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -83,21 +67,11 @@ Deno.serve(async (req) => {
 
   const word = typeof body.word === 'string' ? body.word.trim() : ''
   const paragraph = typeof body.paragraph === 'string' ? body.paragraph.trim() : ''
-  const language =
-    typeof body.language === 'string' && body.language in LANGUAGES
-      ? body.language
-      : DEFAULT_LANGUAGE
+  const language = resolveLanguage(body.language)
   if (!word) return jsonError(400, 'word is required')
   if (!paragraph) return jsonError(400, 'paragraph is required')
 
   const anthropic = new Anthropic({ apiKey: anthropicKey })
-
-  const userMessage = `Paragraph:
-<paragraph>
-${paragraph}
-</paragraph>
-
-Word or phrase to explain: "${word}"`
 
   let explanation = ''
   let wordClass = ''
@@ -109,59 +83,19 @@ Word or phrase to explain: "${word}"`
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: buildSystemPrompt(language),
-      tools: [
-        {
-          name: TOOL_NAME,
-          description:
-            'Record the contextual explanation, synonyms, and example sentences for the word.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              word_class: {
-                type: 'string',
-                description:
-                  "Part of speech of the word as used in this paragraph. Lowercase, e.g. 'noun', 'verb', 'adjective', 'adverb', 'phrasal verb', 'idiom', 'proper noun'."
-              },
-              explanation: {
-                type: 'string',
-                description:
-                  "2 to 4 sentences explaining the word's meaning in this paragraph."
-              },
-              synonyms: {
-                type: 'array',
-                items: { type: 'string' },
-                description:
-                  'Three to five simple synonyms or similar words matching the contextual sense.'
-              },
-              examples: {
-                type: 'array',
-                items: { type: 'string' },
-                description:
-                  'One or two short example sentences using the word in the same sense.'
-              }
-            },
-            required: ['word_class', 'explanation', 'synonyms', 'examples']
-          }
-        }
-      ],
+      tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL_NAME },
-      messages: [{ role: 'user', content: userMessage }]
+      messages: [{ role: 'user', content: buildUserMessage(word, paragraph) }]
     })
 
-    const toolUse = response.content.find((b) => b.type === 'tool_use') as
-      | { type: 'tool_use'; input: Record<string, unknown> }
-      | undefined
-    if (!toolUse) return jsonError(502, 'Claude did not return a structured response')
+    const input = extractToolInput(response.content)
+    if (!input) return jsonError(502, 'Claude did not return a structured response')
 
-    const input = toolUse.input
-    wordClass = String(input.word_class ?? '').trim().toLowerCase()
-    explanation = String(input.explanation ?? '').trim()
-    synonyms = Array.isArray(input.synonyms)
-      ? input.synonyms.map((s) => String(s).trim()).filter(Boolean)
-      : []
-    examples = Array.isArray(input.examples)
-      ? input.examples.map((s) => String(s).trim()).filter(Boolean)
-      : []
+    const parsed = parseLookupInput(input)
+    wordClass = parsed.wordClass
+    explanation = parsed.explanation
+    synonyms = parsed.synonyms
+    examples = parsed.examples
 
     if (!explanation) return jsonError(502, 'Claude returned an empty explanation')
   } catch (e) {
