@@ -27,6 +27,8 @@ import {
   bootstrap,
   deleteLookup,
   getLookup,
+  incrementRelevance,
+  incrementTermRelevance,
   insertLookup,
   listLookups,
   setEtymology
@@ -92,6 +94,18 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   })
 }
 
+// Looking a term up again is an engagement: bump relevance on any earlier rows
+// for the same term+language — matching the lookup-word/lookup-phrase edge
+// functions. Best-effort — never fail the lookup.
+async function bumpTermRelevance(term: string, language: string, excludeId: string) {
+  try {
+    await incrementTermRelevance(term, language, excludeId)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.warn(`[dev-server] increment_term_relevance failed: ${msg}`)
+  }
+}
+
 async function handleLookupWord(body: Record<string, unknown>, res: http.ServerResponse) {
   const word = typeof body.word === 'string' ? body.word.trim() : ''
   const paragraph = typeof body.paragraph === 'string' ? body.paragraph.trim() : ''
@@ -128,6 +142,7 @@ async function handleLookupWord(body: Record<string, unknown>, res: http.ServerR
     examples: parsed.examples,
     language
   })
+  await bumpTermRelevance(word, language, row.id)
   sendJson(res, 200, row)
 }
 
@@ -165,6 +180,7 @@ async function handleLookupPhrase(body: Record<string, unknown>, res: http.Serve
     examples: parsed.examples,
     language
   })
+  await bumpTermRelevance(phrase, language, row.id)
   sendJson(res, 200, row)
 }
 
@@ -250,12 +266,16 @@ async function handleOcrImage(body: Record<string, unknown>, res: http.ServerRes
 async function handleListHistory(url: URL, res: http.ServerResponse) {
   const rawLimit = Number(url.searchParams.get('limit') ?? 20)
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, rawLimit), 100) : 20
+  const rawOffset = Number(url.searchParams.get('offset') ?? 0)
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0
   try {
     const rows = await listLookups({
       language: url.searchParams.get('language') ?? undefined,
       type: url.searchParams.get('type') ?? undefined,
       before: url.searchParams.get('before') ?? undefined,
       search: url.searchParams.get('search')?.trim() || undefined,
+      sort: url.searchParams.get('sort') ?? undefined,
+      offset,
       limit
     })
     sendJson(res, 200, rows)
@@ -282,6 +302,22 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, CORS_HEADERS)
       res.end()
+      return
+    }
+
+    // Stands in for the increment_relevance RPC from migration 0007.
+    if (
+      req.method === 'POST' &&
+      url.pathname.startsWith('/history/') &&
+      url.pathname.endsWith('/relevance')
+    ) {
+      const id = decodeURIComponent(
+        url.pathname.slice('/history/'.length, -'/relevance'.length)
+      )
+      if (!id) return sendError(res, 400, 'id is required')
+      const row = await incrementRelevance(id)
+      if (!row) return sendError(res, 404, 'Lookup not found')
+      sendJson(res, 200, row)
       return
     }
 

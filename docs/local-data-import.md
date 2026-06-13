@@ -34,21 +34,17 @@ local mode runs everything as the fixed dev user
 only lists that user's rows, so the import stages the CSV in a temp table and
 rewrites `user_id` on the way in:
 
-Note the staging table gets an extra `relevance` column: prod has it, but it
-isn't in any migration file (schema drift — added outside the migrations) and
-the app doesn't use it, so the import reads it from the CSV and drops it.
-
 ```bash
 psql vocab_dev -v ON_ERROR_STOP=1 <<'SQL'
 create temp table lookups_import (like public.lookups including defaults);
-alter table lookups_import add column relevance text;
 \copy lookups_import from '/tmp/lookups-prod.csv' csv header
 insert into public.lookups
   (id, user_id, term, paragraph, explanation, synonyms, examples,
-   created_at, word_class, language, type, etymology, updated_at)
+   created_at, word_class, language, type, etymology, updated_at, relevance)
 select
   id, '00000000-0000-0000-0000-000000000001', term, paragraph, explanation,
-  synonyms, examples, created_at, word_class, language, type, etymology, updated_at
+  synonyms, examples, created_at, word_class, language, type, etymology,
+  updated_at, relevance
 from lookups_import
 on conflict (id) do nothing;
 SQL
@@ -74,7 +70,6 @@ should appear under the History tab.
   table (`psql vocab_dev -c "delete from public.lookups"`) never affects prod.
 - If the table gains new columns later (new migration), the explicit column
   lists above need updating to match.
-- Prod's `lookups` table has a `relevance` column (0/1 flag) that exists in no
-  migration file and is unused by the app. Either drop it in prod or capture it
-  in a new migration so the schemas converge; until then the staging-table
-  workaround above absorbs it.
+- The import requires migration `0007_relevance.sql` to have been applied
+  locally (any `npm run dev:server` start after it landed does this); on an
+  older local database the `relevance` column won't exist yet.

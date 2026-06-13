@@ -6,6 +6,8 @@ import { replaceCached } from '../lib/historyCache'
 interface Props {
   lookup: Lookup
   onDelete?: () => void
+  // Fired when a compact card goes from collapsed to expanded (not on collapse).
+  onExpand?: () => void
   compact?: boolean
 }
 
@@ -23,7 +25,7 @@ function wasEdited(createdAt: string, updatedAt: string): boolean {
   return updated - created > 1000
 }
 
-export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
+export function ResultCard({ lookup, onDelete, onExpand, compact }: Props): JSX.Element {
   const [expanded, setExpanded] = useState(!compact)
   // Etymology is filled in on demand; seed from the row and update after fetch.
   const [etymology, setEtymology] = useState(lookup.etymology)
@@ -49,6 +51,11 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
           <div className="result-word">
             <span>{lookup.term}</span>
             <span className={`type-badge ${lookup.type}`}>{lookup.type}</span>
+            {compact && lookup.relevance > 0 && (
+              <span className="relevance-badge" title="Times revisited">
+                ★ {lookup.relevance}
+              </span>
+            )}
             {lookup.wordClass && (
               <span className="word-class">{lookup.wordClass}</span>
             )}
@@ -64,7 +71,10 @@ export function ResultCard({ lookup, onDelete, compact }: Props): JSX.Element {
           {compact && (
             <button
               className="icon-btn"
-              onClick={() => setExpanded((v) => !v)}
+              onClick={() => {
+                if (!expanded) onExpand?.()
+                setExpanded((v) => !v)
+              }}
               title={expanded ? 'Collapse' : 'Expand'}
             >
               {expanded ? '▾' : '▸'}

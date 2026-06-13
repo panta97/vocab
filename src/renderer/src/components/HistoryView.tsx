@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Lookup } from '@shared/types'
-import { deleteLookup, listHistory } from '../lib/api'
+import { deleteLookup, incrementRelevance, listHistory } from '../lib/api'
 import {
   getCached,
   isStale,
   removeCached,
+  replaceCached,
   setCached,
-  type HistoryFilter
+  type HistoryFilter,
+  type HistorySort
 } from '../lib/historyCache'
 import { useLanguage } from '../lib/language'
 import { LanguageSelector } from './LanguageSelector'
@@ -20,19 +22,55 @@ const FILTER_OPTIONS: { value: HistoryFilter; label: string }[] = [
   { value: 'phrase', label: 'Phrases' }
 ]
 
+const SORT_OPTIONS: { value: HistorySort; label: string }[] = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'relevant', label: 'Most relevant' }
+]
+
+// Ids whose expansion already counted toward relevance this app session.
+// Module scope so tab switches (remounts) don't recount the same card.
+const expandedOnce = new Set<string>()
+
 export function HistoryView(): JSX.Element {
   const { language } = useLanguage()
   const [filter, setFilter] = useState<HistoryFilter>('all')
-  const initial = getCached(language, 'all')
+  const [sort, setSort] = useState<HistorySort>('newest')
+  const initial = getCached(language, 'all', 'newest')
   const [items, setItems] = useState<Lookup[]>(initial?.items ?? [])
   const [hasMore, setHasMore] = useState<boolean>(initial?.hasMore ?? false)
   const [search, setSearch] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  // Last search query that already counted toward relevance, so retyping the
+  // same query (or a refresh) doesn't inflate the counter.
+  const lastCountedSearch = useRef('')
 
   // Type filter to pass to the API: undefined means "all types".
   const typeFilter = filter === 'all' ? undefined : filter
+
+  // Applies a relevance bump optimistically to local state and the cache.
+  function bumpLocal(item: Lookup): Lookup {
+    const bumped = { ...item, relevance: item.relevance + 1 }
+    setItems((cur) => cur.map((i) => (i.id === bumped.id ? bumped : i)))
+    replaceCached(bumped)
+    return bumped
+  }
+
+  // Searching for a term and finding it is "checking it again": when the query
+  // exactly matches a term, the most recent matching row earns +1, once per
+  // distinct query. Partial matches never count.
+  function countExactSearchMatch(q: string, results: Lookup[]): Lookup[] {
+    const norm = q.toLowerCase()
+    if (norm === lastCountedSearch.current) return results
+    const match = results.find((i) => i.term.trim().toLowerCase() === norm)
+    if (!match) return results
+    lastCountedSearch.current = norm
+    void incrementRelevance(match.id)
+    const bumped = { ...match, relevance: match.relevance + 1 }
+    replaceCached(bumped)
+    return results.map((i) => (i.id === bumped.id ? bumped : i))
+  }
 
   async function loadFirstPage(q?: string): Promise<void> {
     setError(null)
@@ -41,14 +79,16 @@ export function HistoryView(): JSX.Element {
       search: q,
       limit: PAGE_SIZE,
       language,
-      type: typeFilter
+      type: typeFilter,
+      sort
     })
     setRefreshing(false)
     if (res.ok) {
       const more = res.data.length === PAGE_SIZE
-      setItems(res.data)
+      const data = q ? countExactSearchMatch(q.trim(), res.data) : res.data
+      setItems(data)
       setHasMore(more)
-      if (!q) setCached(res.data, more, language, filter)
+      if (!q) setCached(data, more, language, filter, sort)
     } else {
       setError(res.error)
     }
@@ -61,10 +101,13 @@ export function HistoryView(): JSX.Element {
     setLoadingMore(true)
     const res = await listHistory({
       search: search.trim() || undefined,
-      before: last.createdAt,
+      // Relevance order has no stable timestamp cursor — page by offset there.
+      before: sort === 'newest' ? last.createdAt : undefined,
+      offset: sort === 'relevant' ? items.length : undefined,
       limit: PAGE_SIZE,
       language,
-      type: typeFilter
+      type: typeFilter,
+      sort
     })
     setLoadingMore(false)
     if (res.ok) {
@@ -77,13 +120,13 @@ export function HistoryView(): JSX.Element {
 
   // Load (or reload) the first page when:
   //   - a search query changes,
-  //   - the selected language or type filter changes, or
-  //   - no search and cache is stale/empty (cache is keyed by language+filter).
+  //   - the selected language, type filter, or sort changes, or
+  //   - no search and cache is stale/empty (cache is keyed by language+filter+sort).
   useEffect(() => {
     const q = search.trim() || undefined
-    if (!q && !isStale(language, filter)) {
+    if (!q && !isStale(language, filter, sort)) {
       // Switched back to a page that's still fresh — show it.
-      const cached = getCached(language, filter)
+      const cached = getCached(language, filter, sort)
       if (cached) {
         setItems(cached.items)
         setHasMore(cached.hasMore)
@@ -92,7 +135,7 @@ export function HistoryView(): JSX.Element {
     }
     const t = setTimeout(() => void loadFirstPage(q), q ? 200 : 0)
     return () => clearTimeout(t)
-  }, [search, language, filter])
+  }, [search, language, filter, sort])
 
   async function onDelete(id: string): Promise<void> {
     const res = await deleteLookup(id)
@@ -102,6 +145,14 @@ export function HistoryView(): JSX.Element {
     } else {
       setError(res.error)
     }
+  }
+
+  // Expanding a compact card is "checking it again": +1, once per session.
+  function onCardExpand(item: Lookup): void {
+    if (expandedOnce.has(item.id)) return
+    expandedOnce.add(item.id)
+    void incrementRelevance(item.id)
+    bumpLocal(item)
   }
 
   return (
@@ -115,6 +166,19 @@ export function HistoryView(): JSX.Element {
             role="radio"
             aria-checked={filter === opt.value}
             onClick={() => setFilter(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      <div className="type-filter" role="radiogroup" aria-label="Sort order">
+        {SORT_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            className={sort === opt.value ? 'type-option active' : 'type-option'}
+            role="radio"
+            aria-checked={sort === opt.value}
+            onClick={() => setSort(opt.value)}
           >
             {opt.label}
           </button>
@@ -149,6 +213,7 @@ export function HistoryView(): JSX.Element {
                 <ResultCard
                   lookup={item}
                   onDelete={() => void onDelete(item.id)}
+                  onExpand={() => onCardExpand(item)}
                   compact
                 />
               </li>

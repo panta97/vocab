@@ -10,6 +10,7 @@ import { supabase } from './supabase'
 import {
   LOCAL_MODE,
   localDeleteLookup,
+  localIncrementRelevance,
   localInvoke,
   localListHistory
 } from './local'
@@ -25,6 +26,7 @@ interface LookupRow {
   examples: string[] | null
   etymology: string | null
   language: string | null
+  relevance: number | null
   created_at: string
   updated_at: string | null
 }
@@ -51,6 +53,7 @@ function rowToLookup(row: LookupRow): Lookup {
     examples: row.examples ?? [],
     etymology: row.etymology ?? '',
     language: toLanguage(row.language),
+    relevance: row.relevance ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at
   }
@@ -175,32 +178,61 @@ export async function extractTextFromImage(
   }
 }
 
+// Bumps a lookup's relevance by 1. Best-effort: relevance is a background
+// signal, so failures are logged and never surfaced to the user.
+export async function incrementRelevance(id: string): Promise<void> {
+  const { error } = LOCAL_MODE
+    ? await localIncrementRelevance(id)
+    : await supabase.rpc('increment_relevance', { p_id: id })
+  if (error) console.warn('increment_relevance failed:', error.message)
+}
+
+export type HistorySortOrder = 'newest' | 'relevant'
+
 export interface ListHistoryOptions {
   search?: string
-  before?: string // ISO timestamp; returns rows older than this
+  before?: string // ISO timestamp; returns rows older than this ('newest' sort)
+  offset?: number // row offset for pagination ('relevant' sort)
   limit?: number
   language?: Language // when set, only return lookups in this language
   type?: LookupType // when set, only return lookups of this type (word/phrase)
+  sort?: HistorySortOrder // default 'newest'
 }
 
 export async function listHistory(
   opts: ListHistoryOptions = {}
 ): Promise<ApiResult<Lookup[]>> {
   const limit = opts.limit ?? 20
+  const sort = opts.sort ?? 'newest'
 
   if (LOCAL_MODE) {
-    const { data, error } = await localListHistory<LookupRow>({ ...opts, limit })
+    const { data, error } = await localListHistory<LookupRow>({
+      ...opts,
+      limit,
+      sort
+    })
     if (error) return fail(error)
     return { ok: true, data: (data ?? []).map(rowToLookup) }
   }
 
   try {
-    let query = supabase
-      .from('lookups')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(limit)
+    let query = supabase.from('lookups').select('*')
+
+    if (sort === 'relevant') {
+      // Relevance order has no stable cursor (values change as the user
+      // interacts), so paginate by offset instead of a created_at cursor.
+      const offset = opts.offset ?? 0
+      query = query
+        .order('relevance', { ascending: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(offset, offset + limit - 1)
+    } else {
+      query = query
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(limit)
+    }
 
     if (opts.language) {
       query = query.eq('language', opts.language)
@@ -210,7 +242,7 @@ export async function listHistory(
       query = query.eq('type', opts.type)
     }
 
-    if (opts.before) {
+    if (opts.before && sort === 'newest') {
       query = query.lt('created_at', opts.before)
     }
 

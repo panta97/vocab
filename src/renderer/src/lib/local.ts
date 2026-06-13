@@ -56,17 +56,28 @@ export function localInvoke<T>(name: string, body: unknown): Promise<InvokeResul
 export function localListHistory<T>(opts: {
   search?: string
   before?: string
+  offset?: number
   limit: number
   language?: string
   type?: string
+  sort?: string
 }): Promise<InvokeResult<T[]>> {
   const params = new URLSearchParams()
   params.set('limit', String(opts.limit))
   if (opts.language) params.set('language', opts.language)
   if (opts.type) params.set('type', opts.type)
   if (opts.before) params.set('before', opts.before)
+  if (opts.offset) params.set('offset', String(opts.offset))
+  if (opts.sort) params.set('sort', opts.sort)
   if (opts.search?.trim()) params.set('search', opts.search.trim())
   return request<T[]>(`/history?${params.toString()}`)
+}
+
+// Stands in for the increment_relevance RPC from migration 0007.
+export function localIncrementRelevance(id: string): Promise<InvokeResult<unknown>> {
+  return request<unknown>(`/history/${encodeURIComponent(id)}/relevance`, {
+    method: 'POST'
+  })
 }
 
 export function localDeleteLookup(id: string): Promise<InvokeResult<{ ok: boolean }>> {

@@ -387,6 +387,16 @@ button.secondary:disabled {
   background: rgba(255, 149, 0, 0.14);
 }
 
+.relevance-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: rgba(120, 120, 128, 0.14);
+}
+
 .result-date {
   font-size: 11px;
   color: var(--muted);

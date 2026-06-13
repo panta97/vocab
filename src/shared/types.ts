@@ -20,6 +20,9 @@ export interface Lookup {
   // Origin / history of the term. Empty until generated on demand.
   etymology: string
   language: Language
+  // Engagement counter: +1 each time the user re-interacts with this lookup
+  // (etymology traced, expanded in history, looked up again, exact search hit).
+  relevance: number
   createdAt: string
   // Last modified time. Bumps on edits (e.g. when etymology is added);
   // createdAt stays fixed.

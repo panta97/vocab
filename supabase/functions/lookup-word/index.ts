@@ -121,5 +121,14 @@ Deno.serve(async (req) => {
 
   if (insertErr) return jsonError(500, `Insert failed: ${insertErr.message}`)
 
+  // Looking a term up again is an engagement: bump relevance on any earlier
+  // rows for the same term+language. Best-effort — never fail the lookup.
+  const { error: bumpErr } = await supabase.rpc('increment_term_relevance', {
+    p_term: word,
+    p_language: language,
+    p_exclude_id: row.id
+  })
+  if (bumpErr) console.warn('increment_term_relevance failed:', bumpErr.message)
+
   return new Response(JSON.stringify(row), { headers: JSON_HEADERS })
 })

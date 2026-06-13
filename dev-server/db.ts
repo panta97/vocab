@@ -36,6 +36,7 @@ export interface LookupRow {
   examples: string[]
   language: string
   etymology: string
+  relevance: number
   created_at: Date
   updated_at: Date
 }
@@ -160,12 +161,51 @@ export async function getLookup(id: string): Promise<LookupRow | null> {
 }
 
 // The updated_at trigger from migration 0006 fires on this update, same as prod.
+// Tracing an etymology is an engagement, so relevance bumps with it — matching
+// the etymology edge function.
 export async function setEtymology(id: string, etymology: string): Promise<LookupRow | null> {
   const { rows } = await pool.query(
-    'update public.lookups set etymology = $2 where id = $1 and user_id = $3 returning *',
+    `update public.lookups
+        set etymology = $2, relevance = relevance + 1
+      where id = $1 and user_id = $3
+      returning *`,
     [id, etymology, LOCAL_USER_ID]
   )
   return rows[0] ?? null
+}
+
+// Mirrors public.increment_relevance from migration 0007.
+export async function incrementRelevance(id: string): Promise<LookupRow | null> {
+  try {
+    const { rows } = await pool.query(
+      `update public.lookups
+          set relevance = relevance + 1
+        where id = $1 and user_id = $2
+        returning *`,
+      [id, LOCAL_USER_ID]
+    )
+    return rows[0] ?? null
+  } catch {
+    return null // e.g. id is not a valid uuid
+  }
+}
+
+// Mirrors public.increment_term_relevance from migration 0007: looking a term
+// up again bumps every earlier row for the same term+language.
+export async function incrementTermRelevance(
+  term: string,
+  language: string,
+  excludeId: string
+): Promise<void> {
+  await pool.query(
+    `update public.lookups
+        set relevance = relevance + 1
+      where user_id = $1
+        and lower(term) = lower(trim($2))
+        and language = $3
+        and id <> $4`,
+    [LOCAL_USER_ID, term, language, excludeId]
+  )
 }
 
 export interface ListLookupOptions {
@@ -173,30 +213,39 @@ export interface ListLookupOptions {
   type?: string
   before?: string
   search?: string
+  sort?: string
+  offset?: number
   limit: number
 }
 
-// Mirrors listHistory in src/renderer/src/lib/api.ts: newest first, cursor on
-// created_at, ILIKE search over term and paragraph with %/_ escaped.
+// Mirrors listHistory in src/renderer/src/lib/api.ts: newest first with a
+// created_at cursor, or — for sort 'relevant' — relevance first with offset
+// pagination. ILIKE search over term and paragraph with %/_ escaped.
 export async function listLookups(opts: ListLookupOptions): Promise<LookupRow[]> {
+  const relevant = opts.sort === 'relevant'
   const where: string[] = []
   const params: unknown[] = []
 
   where.push(`user_id = $${params.push(LOCAL_USER_ID)}`)
   if (opts.language) where.push(`language = $${params.push(opts.language)}`)
   if (opts.type) where.push(`type = $${params.push(opts.type)}`)
-  if (opts.before) where.push(`created_at < $${params.push(opts.before)}`)
+  if (opts.before && !relevant) where.push(`created_at < $${params.push(opts.before)}`)
   if (opts.search) {
     const safe = opts.search.replace(/[%_]/g, '\\$&')
     const idx = params.push(`%${safe}%`)
     where.push(`(term ilike $${idx} or paragraph ilike $${idx})`)
   }
 
+  const orderBy = relevant
+    ? 'relevance desc, created_at desc, id desc'
+    : 'created_at desc, id desc'
+
   const { rows } = await pool.query(
     `select * from public.lookups
      where ${where.join(' and ')}
-     order by created_at desc, id desc
-     limit $${params.push(opts.limit)}`,
+     order by ${orderBy}
+     limit $${params.push(opts.limit)}
+     offset $${params.push(relevant ? opts.offset ?? 0 : 0)}`,
     params
   )
   return rows

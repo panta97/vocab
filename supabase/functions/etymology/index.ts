@@ -108,9 +108,12 @@ Deno.serve(async (req) => {
     return jsonError(502, `Claude call failed: ${msg}`)
   }
 
+  // Tracing an etymology is an engagement: bump relevance along with the text.
+  const relevance = (typeof lookup.relevance === 'number' ? lookup.relevance : 0) + 1
+
   const { data: row, error: updateErr } = await supabase
     .from('lookups')
-    .update({ etymology })
+    .update({ etymology, relevance })
     .eq('id', id)
     .select()
     .single()
