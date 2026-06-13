@@ -27,6 +27,7 @@ function wasEdited(createdAt: string, updatedAt: string): boolean {
 
 export function ResultCard({ lookup, onDelete, onExpand, compact }: Props): JSX.Element {
   const [expanded, setExpanded] = useState(!compact)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   // Etymology is filled in on demand; seed from the row and update after fetch.
   const [etymology, setEtymology] = useState(lookup.etymology)
   const [tracing, setTracing] = useState(false)
@@ -80,11 +81,37 @@ export function ResultCard({ lookup, onDelete, onExpand, compact }: Props): JSX.
               {expanded ? '▾' : '▸'}
             </button>
           )}
-          {onDelete && (
-            <button className="icon-btn danger" onClick={onDelete} title="Delete">
-              🗑
-            </button>
-          )}
+          {onDelete &&
+            (confirmingDelete ? (
+              <span className="delete-confirm">
+                <span className="delete-confirm-label">Delete?</span>
+                <button
+                  className="icon-btn danger"
+                  onClick={() => {
+                    setConfirmingDelete(false)
+                    onDelete()
+                  }}
+                  title="Confirm delete"
+                >
+                  ✓
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => setConfirmingDelete(false)}
+                  title="Cancel"
+                >
+                  ✕
+                </button>
+              </span>
+            ) : (
+              <button
+                className="icon-btn danger"
+                onClick={() => setConfirmingDelete(true)}
+                title="Delete"
+              >
+                🗑
+              </button>
+            ))}
         </div>
       </header>
       {expanded && (

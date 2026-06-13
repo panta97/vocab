@@ -428,6 +428,18 @@ button.secondary:disabled {
   color: white;
 }
 
+.delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.delete-confirm-label {
+  font-size: 11px;
+  color: var(--danger);
+  white-space: nowrap;
+}
+
 .result-explanation {
   line-height: 1.5;
   white-space: pre-wrap;
